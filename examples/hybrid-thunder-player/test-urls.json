@@ -1,0 +1,37 @@
+{
+  "testUrls": {
+    "encrypted": [
+      {
+        "title": "追梦的心 (加密TS)",
+        "url": "https://qnktv.ktvdaren.com/tempmls/convert/20250407/4115794.ts",
+        "format": "ts",
+        "encrypted": true
+      },
+      {
+        "title": "东北话 (加密TS)",
+        "url": "https://qnktv.ktvdaren.com/tempmls/convert/20250407/4116492.ts",
+        "format": "ts",
+        "encrypted": true
+      },
+      {
+        "title": "黄河亲娘 (加密TS)",
+        "url": "http://qnktv.ktvdaren.com/tempmls/convert/20250407/4107407.ts",
+        "format": "ts",
+        "encrypted": true
+      }
+    ],
+    "plaintext": [
+      {
+        "title": "Mux测试流 (明文HLS)",
+        "url": "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8",
+        "format": "hls",
+        "encrypted": false
+      }
+    ]
+  },
+  "authConfig": {
+    "appid": "b72d8f35e1c7abde45f69c82d7314590",
+    "sdk_sn": "demo-sdk-sn-001",
+    "note": "测试环境配置，生产环境请替换为正式参数"
+  }
+}

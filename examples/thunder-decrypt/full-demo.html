@@ -1,0 +1,1003 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ThunderStone + libmedia 完整集成示例 v1.1</title>
+  <!-- 版本: 1.1 - 添加MP3解码器支持 -->
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      padding: 20px;
+    }
+    
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+    }
+    
+    .header {
+      background: rgba(255, 255, 255, 0.95);
+      backdrop-filter: blur(10px);
+      border-radius: 12px;
+      padding: 30px;
+      margin-bottom: 20px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+    }
+    
+    h1 {
+      font-size: 32px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 10px;
+    }
+    
+    .subtitle {
+      color: #666;
+      font-size: 16px;
+    }
+    
+    .main-content {
+      display: grid;
+      grid-template-columns: 1fr 400px;
+      gap: 20px;
+    }
+    
+    .player-section {
+      background: rgba(255, 255, 255, 0.95);
+      backdrop-filter: blur(10px);
+      border-radius: 12px;
+      padding: 20px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+    }
+    
+    .player-container {
+      background: #000;
+      border-radius: 8px;
+      overflow: hidden;
+      margin-bottom: 20px;
+      aspect-ratio: 16/9;
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    
+    #videoContainer {
+      width: 100%;
+      height: 100%;
+    }
+    
+    .placeholder {
+      color: #666;
+      font-size: 18px;
+      text-align: center;
+    }
+    
+    .controls {
+      background: #f8f9fa;
+      border-radius: 8px;
+      padding: 15px;
+      margin-bottom: 15px;
+    }
+    
+    .input-group {
+      margin-bottom: 12px;
+    }
+    
+    label {
+      display: block;
+      margin-bottom: 6px;
+      color: #333;
+      font-size: 13px;
+      font-weight: 600;
+    }
+    
+    input[type="text"] {
+      width: 100%;
+      padding: 10px 12px;
+      background: #fff;
+      border: 2px solid #e0e0e0;
+      border-radius: 6px;
+      font-size: 14px;
+      transition: border-color 0.2s;
+    }
+    
+    input[type="text"]:focus {
+      outline: none;
+      border-color: #667eea;
+    }
+    
+    .button-group {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 8px;
+    }
+    
+    button {
+      padding: 10px 16px;
+      border: none;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+    
+    .btn-primary {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+    }
+    
+    .btn-primary:hover:not(:disabled) {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+    }
+    
+    .btn-secondary {
+      background: #fff;
+      color: #667eea;
+      border: 2px solid #667eea;
+    }
+    
+    .btn-secondary:hover:not(:disabled) {
+      background: #667eea;
+      color: white;
+    }
+    
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    
+    .sidebar {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+    
+    .info-panel, .log-panel {
+      background: rgba(255, 255, 255, 0.95);
+      backdrop-filter: blur(10px);
+      border-radius: 12px;
+      padding: 20px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+    }
+    
+    .panel-title {
+      font-size: 18px;
+      font-weight: 700;
+      color: #333;
+      margin-bottom: 15px;
+      padding-bottom: 10px;
+      border-bottom: 2px solid #f0f0f0;
+    }
+    
+    .info-item {
+      display: flex;
+      justify-content: space-between;
+      padding: 8px 0;
+      font-size: 13px;
+      border-bottom: 1px solid #f5f5f5;
+    }
+    
+    .info-item:last-child {
+      border-bottom: none;
+    }
+    
+    .info-label {
+      color: #666;
+      font-weight: 500;
+    }
+    
+    .info-value {
+      color: #333;
+      font-weight: 600;
+      text-align: right;
+    }
+    
+    .status-badge {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 12px;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    
+    .status-init { background: #e3f2fd; color: #1976d2; }
+    .status-loading { background: #fff3e0; color: #f57c00; }
+    .status-ready { background: #e8f5e9; color: #388e3c; }
+    .status-playing { background: #e1f5fe; color: #0288d1; }
+    .status-error { background: #ffebee; color: #d32f2f; }
+    
+    .log-container {
+      background: #1a1a1a;
+      border-radius: 6px;
+      padding: 12px;
+      max-height: 300px;
+      overflow-y: auto;
+      font-family: 'Monaco', 'Courier New', monospace;
+      font-size: 11px;
+    }
+    
+    .log-entry {
+      padding: 3px 0;
+      line-height: 1.6;
+    }
+    
+    .log-time {
+      color: #666;
+      margin-right: 8px;
+    }
+    
+    .log-info { color: #64b5f6; }
+    .log-success { color: #81c784; }
+    .log-warning { color: #ffb74d; }
+    .log-error { color: #e57373; }
+    
+    .samples {
+      background: #f8f9fa;
+      border-radius: 6px;
+      padding: 12px;
+      margin-top: 10px;
+    }
+    
+    .sample-title {
+      font-size: 12px;
+      font-weight: 600;
+      color: #666;
+      margin-bottom: 8px;
+    }
+    
+    .sample-item {
+      padding: 6px 10px;
+      background: white;
+      border-radius: 4px;
+      margin-bottom: 6px;
+      cursor: pointer;
+      font-size: 12px;
+      transition: all 0.2s;
+      border: 1px solid #e0e0e0;
+    }
+    
+    .sample-item:hover {
+      border-color: #667eea;
+      background: #f0f4ff;
+    }
+    
+    .sample-item:last-child {
+      margin-bottom: 0;
+    }
+    
+    @media (max-width: 1200px) {
+      .main-content {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>🎬 ThunderStone + libmedia 完整集成</h1>
+      <p class="subtitle">透明解密 + 硬件解码 = 极致性能体验</p>
+    </div>
+    
+    <div class="main-content">
+      <div class="player-section">
+        <div class="player-container" id="playerContainer">
+          <div id="videoContainer"></div>
+        </div>
+        
+        <div class="controls">
+          <div class="input-group">
+            <label for="videoUrl">📹 视频地址</label>
+            <input 
+              type="text" 
+              id="videoUrl" 
+              placeholder="支持加密/明文 TS、M3U8、MP4..."
+              value="https://qnktv.ktvdaren.com/tempmls/convert/20250407/4115794.ts"
+            />
+          </div>
+          
+          <div class="samples">
+            <div class="sample-title">🔐 ThunderStone加密视频（点击快速填充）</div>
+            <div class="sample-item" data-url="https://qnktv.ktvdaren.com/tempmls/convert/20250407/4115794.ts">
+              🎵 追梦的心 (加密TS)
+            </div>
+            <div class="sample-item" data-url="https://qnktv.ktvdaren.com/tempmls/convert/20250407/4116492.ts">
+              🎵 东北话 (加密TS)
+            </div>
+            <div class="sample-item" data-url="http://qnktv.ktvdaren.com/tempmls/convert/20250407/4107407.ts">
+              🎵 黄河亲娘 (加密TS)
+            </div>
+            <div class="sample-item" data-url="http://qnktv.ktvdaren.com/tempmls/convert/20250407/4108989.ts">
+              🎵 西樵情缘 (加密TS)
+            </div>
+            <div class="sample-title" style="margin-top: 12px;">🌐 测试视频（明文）</div>
+            <div class="sample-item" data-url="https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8">
+              🌐 Mux测试流 (HLS)
+            </div>
+          </div>
+          
+          <div class="button-group" style="margin-top: 15px;">
+            <button id="loadBtn" class="btn-primary">
+              📥 加载视频
+            </button>
+            <button id="playBtn" class="btn-secondary" disabled>
+              ▶️ 播放
+            </button>
+            <button id="pauseBtn" class="btn-secondary" disabled>
+              ⏸️ 暂停
+            </button>
+            <button id="stopBtn" class="btn-secondary" disabled>
+              ⏹️ 停止
+            </button>
+          </div>
+        </div>
+      </div>
+      
+      <div class="sidebar">
+        <div class="info-panel">
+          <div class="panel-title">📊 播放信息</div>
+          
+          <div class="info-item">
+            <span class="info-label">状态</span>
+            <span class="info-value">
+              <span id="statusBadge" class="status-badge status-init">初始化中</span>
+            </span>
+          </div>
+          
+          <div class="info-item">
+            <span class="info-label">WASM模块</span>
+            <span class="info-value" id="wasmStatus">加载中...</span>
+          </div>
+          
+          <div class="info-item">
+            <span class="info-label">解密模式</span>
+            <span class="info-value" id="decryptMode">-</span>
+          </div>
+          
+          <div class="info-item">
+            <span class="info-label">视频编码</span>
+            <span class="info-value" id="videoCodec">-</span>
+          </div>
+          
+          <div class="info-item">
+            <span class="info-label">分辨率</span>
+            <span class="info-value" id="resolution">-</span>
+          </div>
+          
+          <div class="info-item">
+            <span class="info-label">帧率</span>
+            <span class="info-value" id="fps">-</span>
+          </div>
+          
+          <div class="info-item">
+            <span class="info-label">解码方式</span>
+            <span class="info-value" id="decodeMode">-</span>
+          </div>
+        </div>
+        
+        <div class="log-panel">
+          <div class="panel-title">📝 运行日志</div>
+          <div class="log-container" id="logContainer"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  <!-- 加载 ThunderStone WASM -->
+  <script src="./thunder_module.js"></script>
+  
+  <!-- 加载 libmedia AVPlayer -->
+  <script src="../../dist/avplayer/avplayer.js"></script>
+  
+  <script>
+    // 简单的HTTP加载器（带缓冲区）
+    class SimpleHTTPLoader {
+      constructor(url) {
+        this.url = url
+        this.reader = null
+        this.response = null
+        this.pos = 0
+        this.totalSize = 0
+        this.pendingBuffer = null  // 缓存未消费的数据
+      }
+      
+      get ext() {
+        return this.url.split('.').pop() || 'ts'
+      }
+      
+      get flags() { return 0 }
+      get name() { return `SimpleHTTPLoader(${this.url})` }
+      get minBuffer() { return 4 }
+      
+      async open() {
+        try {
+          console.log('[SimpleHTTPLoader] Opening:', this.url)
+          // 获取文件大小
+          const headResp = await fetch(this.url, { method: 'HEAD' })
+          const contentLength = headResp.headers.get('Content-Length')
+          if (contentLength) {
+            this.totalSize = parseInt(contentLength)
+          }
+          console.log('[SimpleHTTPLoader] Content-Length:', this.totalSize)
+          
+          // 打开数据流
+          this.response = await fetch(this.url)
+          this.reader = this.response.body.getReader()
+          this.pos = 0
+          this.pendingBuffer = null
+          console.log('[SimpleHTTPLoader] Stream opened')
+          return 0
+        } catch (error) {
+          console.error('[SimpleHTTPLoader] open failed:', error)
+          return -1
+        }
+      }
+      
+      async read(buffer) {
+        try {
+          let offset = 0
+          
+          // 先消费缓存的数据
+          if (this.pendingBuffer) {
+            const toCopy = Math.min(this.pendingBuffer.length, buffer.length)
+            buffer.set(this.pendingBuffer.subarray(0, toCopy), 0)
+            offset = toCopy
+            this.pos += toCopy
+            
+            if (toCopy < this.pendingBuffer.length) {
+              // 还有剩余，保留
+              this.pendingBuffer = this.pendingBuffer.subarray(toCopy)
+              return offset
+            } else {
+              // 全部消费完
+              this.pendingBuffer = null
+            }
+          }
+          
+          // 从流中读取新数据
+          while (offset < buffer.length) {
+            const { value, done } = await this.reader.read()
+            if (done) {
+              // EOF: 返回已读取的字节数（可能为0）
+              return offset > 0 ? offset : -1
+            }
+            
+            const remaining = buffer.length - offset
+            const toCopy = Math.min(value.length, remaining)
+            
+            buffer.set(value.subarray(0, toCopy), offset)
+            offset += toCopy
+            this.pos += toCopy
+            
+            // 如果有剩余数据，缓存起来
+            if (toCopy < value.length) {
+              this.pendingBuffer = value.subarray(toCopy)
+              break
+            }
+          }
+          
+          return offset
+        } catch (error) {
+          console.error('SimpleHTTPLoader read failed:', error)
+          return -1
+        }
+      }
+      
+      async seek(pos) {
+        try {
+          // 关闭当前流
+          if (this.reader) {
+            await this.reader.cancel()
+          }
+          
+          // 重新打开并seek
+          this.response = await fetch(this.url, {
+            headers: { Range: `bytes=${Number(pos)}-` }
+          })
+          this.reader = this.response.body.getReader()
+          this.pos = Number(pos)
+          this.pendingBuffer = null  // 清空缓存
+          return 0
+        } catch (error) {
+          console.error('SimpleHTTPLoader seek failed:', error)
+          return -1
+        }
+      }
+      
+      async size() {
+        return BigInt(this.totalSize || 0)
+      }
+      
+      async stop() {
+        if (this.reader) {
+          try {
+            await this.reader.cancel()
+          } catch (e) {}
+          this.reader = null
+        }
+        this.response = null
+      }
+    }
+    
+    // ThunderStone解密IOLoader - 必须继承 AVPlayer.IOLoader.CustomIOLoader
+    class ThunderStoneIOLoader extends AVPlayer.IOLoader.CustomIOLoader {
+      constructor(options) {
+        super()  // 调用父类构造函数
+        this.options = options
+        this.thunderModule = options.thunderModule
+        this.baseLoader = options.baseLoader
+        this.currentPos = 0n
+        this.headerBuffer = null
+        this.isEncrypted = false
+        
+        // 初始化解密器
+        this.decryptHandle = this.thunderModule._tsInitDecrypt()
+        if (!this.decryptHandle) {
+          throw new Error('ThunderStone解密器初始化失败')
+        }
+      }
+      
+      get ext() { return this.baseLoader.ext }
+      get flags() { return this.baseLoader.flags }
+      get name() { return `ThunderStone(${this.baseLoader.name})` }
+      get minBuffer() { return this.baseLoader.minBuffer }
+      
+      async open() {
+        console.log('[ThunderStoneIOLoader] Opening...')
+        const result = await this.baseLoader.open()
+        if (result < 0) {
+          console.error('[ThunderStoneIOLoader] Base loader open failed')
+          return result
+        }
+        
+        console.log('[ThunderStoneIOLoader] Reading header...')
+        // 读取512字节头部检查是否加密
+        this.headerBuffer = new Uint8Array(512)
+        let headerRead = 0
+        while (headerRead < 512) {
+          const ret = await this.baseLoader.read(this.headerBuffer.subarray(headerRead))
+          if (ret < 0) {
+            console.error('[ThunderStoneIOLoader] Header read failed')
+            return -1
+          }
+          headerRead += ret
+        }
+        
+        console.log('[ThunderStoneIOLoader] Checking encryption...')
+        // 检查是否为加密流（注意：_tsCheckDecrypt 只是检查，不会修改数据）
+        const bufferPtr = this.thunderModule._malloc(512)
+        try {
+          this.thunderModule.HEAPU8.set(this.headerBuffer, bufferPtr)
+          const checkResult = this.thunderModule._tsCheckDecrypt(this.decryptHandle, bufferPtr, 512)
+          // ⚠️ 注意：ThunderStone的返回值逻辑是：0=加密, -3=明文（与常规相反！）
+          this.isEncrypted = (checkResult === 0)  // 修复：0 表示加密
+          
+          // 打印详细调试信息
+          const headerHex = Array.from(this.headerBuffer.slice(0, 32))
+            .map(b => b.toString(16).padStart(2, '0')).join(' ')
+          const headerAscii = Array.from(this.headerBuffer.slice(0, 32))
+            .map(b => (b >= 32 && b < 127) ? String.fromCharCode(b) : '.').join('')
+          
+          console.log('='.repeat(50))
+          console.log('[ThunderStoneIOLoader] 加密检测结果:')
+          console.log('  checkResult:', checkResult)
+          console.log('  isEncrypted:', this.isEncrypted)
+          console.log('  头部前32字节(HEX):', headerHex)
+          console.log('  头部前32字节(ASCII):', headerAscii)
+          console.log('  ⚠️ ThunderStone逻辑: 0=加密, -3=明文 (与常规相反!)')
+          console.log('  实际: checkResult ===', checkResult, '表示', this.isEncrypted ? '加密流' : '明文流')
+          console.log('='.repeat(50))
+        } finally {
+          this.thunderModule._free(bufferPtr)
+        }
+        
+        // 注意：头部不需要在这里解密！
+        // 根据 TS 版本实现，currentPos 从 512 开始，意味着头部直接返回原始数据
+        this.currentPos = 512n
+        console.log(`ThunderStone: 流类型 = ${this.isEncrypted ? '加密' : '明文'}`)
+        return 0
+      }
+      
+      async read(buffer) {
+        // 如果头部还未返回，先返回头部（原始数据，不解密）
+        if (this.headerBuffer) {
+          const len = Math.min(buffer.length, this.headerBuffer.length)
+          console.log(`[ThunderStoneIOLoader] 返回头部: ${len} 字节`)
+          buffer.set(this.headerBuffer.subarray(0, len))
+          
+          if (len < this.headerBuffer.length) {
+            this.headerBuffer = this.headerBuffer.subarray(len)
+          } else {
+            this.headerBuffer = null
+            console.log('[ThunderStoneIOLoader] 头部已全部返回，currentPos:', this.currentPos)
+          }
+          return len
+        }
+        
+        // 从底层加载器读取数据
+        const bytesRead = await this.baseLoader.read(buffer)
+        if (bytesRead <= 0) return bytesRead
+        
+        console.log(`[ThunderStoneIOLoader] 读取 ${bytesRead} 字节，currentPos: ${this.currentPos}, isEncrypted: ${this.isEncrypted}`)
+        
+        // 如果是加密流，需要解密
+        if (this.isEncrypted) {
+          const BLOCK_SIZE = 8192
+          let offset = 0
+          let decryptCount = 0
+          
+          while (offset < bytesRead) {
+            const blockSize = Math.min(BLOCK_SIZE, bytesRead - offset)
+            const bufferPtr = this.thunderModule._malloc(blockSize)
+            
+            try {
+              // 复制数据到WASM内存
+              this.thunderModule.HEAPU8.set(
+                new Uint8Array(buffer.buffer, buffer.byteOffset + offset, blockSize),
+                bufferPtr
+              )
+              
+              // 解密（注意：currentPos 从 512 开始，因为头部已经返回了）
+              const decryptOffset = Number(this.currentPos) + offset
+              const result = this.thunderModule._tsDataDecrypt(
+                this.decryptHandle,
+                bufferPtr,
+                blockSize,
+                decryptOffset
+              )
+              
+              if (result !== 0) {
+                console.error(`[ThunderStoneIOLoader] 解密失败: ${result}, offset: ${decryptOffset}`)
+              } else {
+                decryptCount++
+              }
+              
+              // 复制解密后的数据回来
+              const decrypted = new Uint8Array(
+                this.thunderModule.HEAPU8.buffer,
+                bufferPtr,
+                blockSize
+              )
+              buffer.set(decrypted, offset)
+            } finally {
+              this.thunderModule._free(bufferPtr)
+            }
+            
+            offset += blockSize
+          }
+          
+          if (decryptCount > 0) {
+            console.log(`[ThunderStoneIOLoader] 成功解密 ${decryptCount} 个块`)
+          }
+        }
+        
+        this.currentPos += BigInt(bytesRead)
+        return bytesRead
+      }
+      
+      async seek(pos) {
+        if (this.isEncrypted) {
+          this.thunderModule._tsDataDecryptSeek(this.decryptHandle, Number(pos))
+        }
+        
+        const result = await this.baseLoader.seek(pos)
+        if (result === 0) {
+          this.currentPos = pos
+          this.headerBuffer = null
+        }
+        return result
+      }
+      
+      async size() {
+        return await this.baseLoader.size()
+      }
+      
+      async stop() {
+        if (this.decryptHandle) {
+          this.thunderModule._tsDeinitDecrypt(this.decryptHandle)
+          this.decryptHandle = 0
+        }
+        await this.baseLoader.stop()
+      }
+    }
+    class IntegratedPlayer {
+      constructor() {
+        this.player = null
+        this.thunderModule = null
+        this.initUI()
+        this.initThunderStone()
+      }
+      
+      initUI() {
+        this.elements = {
+          loadBtn: document.getElementById('loadBtn'),
+          playBtn: document.getElementById('playBtn'),
+          pauseBtn: document.getElementById('pauseBtn'),
+          stopBtn: document.getElementById('stopBtn'),
+          videoUrl: document.getElementById('videoUrl'),
+          statusBadge: document.getElementById('statusBadge'),
+          wasmStatus: document.getElementById('wasmStatus'),
+          decryptMode: document.getElementById('decryptMode'),
+          videoCodec: document.getElementById('videoCodec'),
+          resolution: document.getElementById('resolution'),
+          fps: document.getElementById('fps'),
+          decodeMode: document.getElementById('decodeMode'),
+          logContainer: document.getElementById('logContainer')
+        }
+        
+        // 绑定事件
+        this.elements.loadBtn.addEventListener('click', () => this.loadVideo())
+        this.elements.playBtn.addEventListener('click', () => this.play())
+        this.elements.pauseBtn.addEventListener('click', () => this.pause())
+        this.elements.stopBtn.addEventListener('click', () => this.stop())
+        
+        // 示例视频点击
+        document.querySelectorAll('.sample-item').forEach(item => {
+          item.addEventListener('click', () => {
+            this.elements.videoUrl.value = item.dataset.url
+          })
+        })
+      }
+      
+      async initThunderStone() {
+        try {
+          this.log('正在加载 ThunderStone WASM 模块...', 'info')
+          
+          // 等待Module初始化
+          await new Promise((resolve) => {
+            const check = setInterval(() => {
+              if (typeof Module !== 'undefined' && Module._tsInitDecrypt) {
+                clearInterval(check)
+                resolve()
+              }
+            }, 100)
+          })
+          
+          this.thunderModule = Module
+          this.elements.wasmStatus.textContent = '✅ 已加载'
+          this.log('✅ ThunderStone WASM 加载成功', 'success')
+          this.updateStatus('ready', '就绪')
+          
+        } catch (error) {
+          this.log('❌ WASM加载失败: ' + error.message, 'error')
+          this.elements.wasmStatus.textContent = '❌ 加载失败'
+          this.updateStatus('error', '初始化失败')
+        }
+      }
+      
+      async loadVideo() {
+        const url = this.elements.videoUrl.value.trim()
+        if (!url) {
+          alert('请输入视频URL')
+          return
+        }
+        
+        if (!this.thunderModule) {
+          alert('ThunderStone WASM未加载')
+          return
+        }
+        
+        // 如果已有播放器，先销毁
+        if (this.player) {
+          this.log('🗑️ 销毁旧播放器...', 'info')
+          try {
+            await this.player.destroy()
+          } catch (e) {}
+          this.player = null
+        }
+        
+        try {
+          this.log(`📥 开始加载: ${url}`, 'info')
+          this.updateStatus('loading', '加载中')
+          
+          // 1. 创建 SimpleHTTPLoader
+          this.log('🔧 创建HTTP加载器...', 'info')
+          const baseLoader = new SimpleHTTPLoader(url)
+          
+          // 2. 创建 ThunderStoneIOLoader
+          this.log('🔐 创建ThunderStone解密加载器...', 'info')
+          const decryptLoader = new ThunderStoneIOLoader({
+            thunderModule: this.thunderModule,
+            baseLoader: baseLoader
+          })
+          
+          // 3. 创建 AVPlayer
+          this.log('🎥 创建 AVPlayer...', 'info')
+          if (!AVPlayer.audioContext) {
+            AVPlayer.audioContext = new AudioContext()
+          }
+          
+          this.player = new AVPlayer({
+            container: document.getElementById('videoContainer'),
+            enableWebCodecs: true,
+            enableHardware: true,
+            loop: false,
+            getWasm: (type, codecId) => {
+              console.log('[getWasm] 请求WASM:', { type, codecId })
+              // 视频解码器
+              if (type === 'decoder' && codecId === 27) {
+                console.log('[getWasm] 返回 h264.wasm')
+                return '../../dist/decode/h264.wasm'
+              }
+              // 音频解码器
+              if (type === 'decoder' && codecId === 86018) {
+                console.log('[getWasm] 返回 aac.wasm')
+                return '../../dist/decode/aac.wasm'
+              }
+              if (type === 'decoder' && codecId === 86017) {
+                console.log('[getWasm] 返回 mp3.wasm')
+                return '../../dist/decode/mp3.wasm'
+              }
+              // 音频重采样器
+              if (type === 'resampler') {
+                console.log('[getWasm] 返回 resample.wasm')
+                return '../../dist/resample/resample.wasm'
+              }
+              // 音频变速变调器 (注意是 stretchpitcher 不是 stretchpitch)
+              if (type === 'stretchpitcher') {
+                console.log('[getWasm] 返回 stretchpitch.wasm')
+                return '../../dist/stretchpitch/stretchpitch.wasm'
+              }
+              console.log('[getWasm] 未匹配，返回 null')
+              return null
+            }
+          })
+          
+          // 监听事件
+          this.player.on('loaded', () => {
+            this.log('✅ 视频加载成功', 'success')
+            this.elements.decryptMode.textContent = decryptLoader.isEncrypted ? '✅ 加密（已解密）' : '❌ 明文'
+            this.updateStatus('ready', '已加载')
+            this.elements.playBtn.disabled = false
+            
+            // 获取视频信息
+            const streams = this.player.getStreams()
+            if (streams && streams.length > 0) {
+              const videoStream = streams.find(s => s.codecpar.codecType === 0) // video
+              if (videoStream) {
+                this.elements.videoCodec.textContent = this.getCodecName(videoStream.codecpar.codecId)
+                this.elements.resolution.textContent = `${videoStream.codecpar.width}x${videoStream.codecpar.height}`
+                const fps = videoStream.codecpar.framerate
+                if (fps && fps.den) {
+                  this.elements.fps.textContent = `${Math.round(fps.num / fps.den)} fps`
+                }
+              }
+            }
+            this.elements.decodeMode.textContent = 'WebCodecs 硬解'
+          })
+          
+          this.player.on('error', (error) => {
+            this.log(`❌ 播放器错误: ${error.message || error}`, 'error')
+            this.updateStatus('error', '错误')
+          })
+          
+          this.player.on('played', () => {
+            this.log('▶️ 开始播放', 'success')
+            this.updateStatus('playing', '播放中')
+          })
+          
+          this.player.on('paused', () => {
+            this.log('⏸️ 已暂停', 'info')
+            this.updateStatus('ready', '已暂停')
+          })
+          
+          this.player.on('ended', () => {
+            this.log('✅ 播放结束', 'success')
+            this.updateStatus('ready', '已结束')
+            this.elements.playBtn.disabled = false
+            this.elements.pauseBtn.disabled = true
+            this.elements.stopBtn.disabled = true
+          })
+          
+          // 4. 加载视频 - 注意：传递 decryptLoader 而不是 url
+          this.log(`📂 加载文件: ${url}`, 'info')
+          
+          try {
+            await this.player.load(decryptLoader)
+            this.log('✅ load()调用成功', 'success')
+          } catch (loadError) {
+            this.log(`❌ load()失败: ${loadError.message}`, 'error')
+            console.error('Load error details:', loadError)
+            throw loadError
+          }
+          
+        } catch (error) {
+          this.log(`❌ 加载失败: ${error.message}`, 'error')
+          this.log(`堆栈: ${error.stack}`, 'error')
+          this.updateStatus('error', '加载失败')
+        }
+      }
+      
+      getCodecName(codecId) {
+        const codecMap = {
+          27: 'H.264',
+          173: 'H.265/HEVC',
+          225: 'AV1',
+          12: 'MPEG-4',
+          2: 'MPEG-2',
+          86018: 'AAC',
+          86017: 'MP3'
+        }
+        return codecMap[codecId] || `Codec#${codecId}`
+      }
+      
+      async play() {
+        if (!this.player) return
+        this.log('▶️ 开始播放', 'info')
+        try {
+          await this.player.play()
+          this.elements.playBtn.disabled = true
+          this.elements.pauseBtn.disabled = false
+          this.elements.stopBtn.disabled = false
+        } catch (error) {
+          this.log(`❌ 播放失败: ${error.message}`, 'error')
+        }
+      }
+      
+      async pause() {
+        if (!this.player) return
+        this.log('⏸️ 暂停播放', 'info')
+        try {
+          await this.player.pause()
+          this.elements.playBtn.disabled = false
+          this.elements.pauseBtn.disabled = true
+        } catch (error) {
+          this.log(`❌ 暂停失败: ${error.message}`, 'error')
+        }
+      }
+      
+      async stop() {
+        if (!this.player) return
+        this.log('⏹️ 停止播放', 'info')
+        try {
+          await this.player.stop()
+          this.elements.playBtn.disabled = false
+          this.elements.pauseBtn.disabled = true
+          this.elements.stopBtn.disabled = true
+        } catch (error) {
+          this.log(`❌ 停止失败: ${error.message}`, 'error')
+        }
+      }
+      
+      updateStatus(type, text) {
+        this.elements.statusBadge.className = `status-badge status-${type}`
+        this.elements.statusBadge.textContent = text
+      }
+      
+      log(message, level = 'info') {
+        const time = new Date().toLocaleTimeString()
+        const entry = document.createElement('div')
+        entry.className = 'log-entry'
+        entry.innerHTML = `
+          <span class="log-time">[${time}]</span>
+          <span class="log-${level}">${message}</span>
+        `
+        this.elements.logContainer.appendChild(entry)
+        this.elements.logContainer.scrollTop = this.elements.logContainer.scrollHeight
+      }
+    }
+    
+    // 启动应用
+    window.app = new IntegratedPlayer()
+  </script>
+</body>
+</html>

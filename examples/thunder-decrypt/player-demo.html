@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ThunderStone解密播放示例 - libmedia</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #1a1a1a;
+      color: #fff;
+      padding: 20px;
+    }
+    
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    
+    h1 {
+      font-size: 28px;
+      margin-bottom: 10px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    
+    .subtitle {
+      color: #888;
+      margin-bottom: 30px;
+      font-size: 14px;
+    }
+    
+    .player-container {
+      background: #000;
+      border-radius: 8px;
+      overflow: hidden;
+      margin-bottom: 20px;
+      aspect-ratio: 16/9;
+      position: relative;
+    }
+    
+    #player {
+      width: 100%;
+      height: 100%;
+    }
+    
+    .controls {
+      background: #2a2a2a;
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+    
+    .input-group {
+      margin-bottom: 15px;
+    }
+    
+    label {
+      display: block;
+      margin-bottom: 8px;
+      color: #aaa;
+      font-size: 14px;
+    }
+    
+    input[type="text"] {
+      width: 100%;
+      padding: 12px;
+      background: #1a1a1a;
+      border: 1px solid #444;
+      border-radius: 6px;
+      color: #fff;
+      font-size: 14px;
+    }
+    
+    input[type="text"]:focus {
+      outline: none;
+      border-color: #667eea;
+    }
+    
+    .button-group {
+      display: flex;
+      gap: 10px;
+    }
+    
+    button {
+      flex: 1;
+      padding: 12px 24px;
+      border: none;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    
+    .btn-primary {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+    }
+    
+    .btn-primary:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+    }
+    
+    .btn-secondary {
+      background: #444;
+      color: white;
+    }
+    
+    .btn-secondary:hover {
+      background: #555;
+    }
+    
+    .btn-primary:disabled,
+    .btn-secondary:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+    }
+    
+    .info-panel {
+      background: #2a2a2a;
+      border-radius: 8px;
+      padding: 20px;
+    }
+    
+    .info-title {
+      font-size: 18px;
+      margin-bottom: 15px;
+      color: #667eea;
+    }
+    
+    .info-item {
+      display: flex;
+      justify-content: space-between;
+      padding: 8px 0;
+      border-bottom: 1px solid #333;
+      font-size: 14px;
+    }
+    
+    .info-item:last-child {
+      border-bottom: none;
+    }
+    
+    .info-label {
+      color: #aaa;
+    }
+    
+    .info-value {
+      color: #fff;
+      font-weight: 500;
+    }
+    
+    .status {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 12px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    
+    .status-loading {
+      background: #ffc107;
+      color: #000;
+    }
+    
+    .status-ready {
+      background: #4caf50;
+      color: #fff;
+    }
+    
+    .status-playing {
+      background: #2196f3;
+      color: #fff;
+    }
+    
+    .status-error {
+      background: #f44336;
+      color: #fff;
+    }
+    
+    .log-container {
+      background: #1a1a1a;
+      border: 1px solid #333;
+      border-radius: 6px;
+      padding: 15px;
+      max-height: 200px;
+      overflow-y: auto;
+      font-family: 'Monaco', 'Courier New', monospace;
+      font-size: 12px;
+      margin-top: 15px;
+    }
+    
+    .log-entry {
+      padding: 4px 0;
+      border-bottom: 1px solid #2a2a2a;
+    }
+    
+    .log-time {
+      color: #666;
+      margin-right: 8px;
+    }
+    
+    .log-info { color: #2196f3; }
+    .log-success { color: #4caf50; }
+    .log-warning { color: #ffc107; }
+    .log-error { color: #f44336; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🎬 ThunderStone解密播放示例</h1>
+    <p class="subtitle">libmedia + ThunderStone WASM 透明解密方案</p>
+    
+    <div class="player-container">
+      <div id="player"></div>
+    </div>
+    
+    <div class="controls">
+      <div class="input-group">
+        <label for="videoUrl">视频URL（支持加密/明文TS文件、M3U8）</label>
+        <input 
+          type="text" 
+          id="videoUrl" 
+          placeholder="https://example.com/video.ts 或 https://example.com/playlist.m3u8"
+          value=""
+        />
+      </div>
+      
+      <div class="button-group">
+        <button id="loadBtn" class="btn-primary">
+          📥 加载视频
+        </button>
+        <button id="playBtn" class="btn-secondary" disabled>
+          ▶️ 播放
+        </button>
+        <button id="pauseBtn" class="btn-secondary" disabled>
+          ⏸️ 暂停
+        </button>
+        <button id="stopBtn" class="btn-secondary" disabled>
+          ⏹️ 停止
+        </button>
+      </div>
+    </div>
+    
+    <div class="info-panel">
+      <div class="info-title">播放信息</div>
+      
+      <div class="info-item">
+        <span class="info-label">状态:</span>
+        <span class="info-value">
+          <span id="statusBadge" class="status status-loading">初始化中</span>
+        </span>
+      </div>
+      
+      <div class="info-item">
+        <span class="info-label">解密模式:</span>
+        <span class="info-value" id="decryptMode">-</span>
+      </div>
+      
+      <div class="info-item">
+        <span class="info-label">视频编码:</span>
+        <span class="info-value" id="videoCodec">-</span>
+      </div>
+      
+      <div class="info-item">
+        <span class="info-label">分辨率:</span>
+        <span class="info-value" id="resolution">-</span>
+      </div>
+      
+      <div class="info-item">
+        <span class="info-label">帧率:</span>
+        <span class="info-value" id="fps">-</span>
+      </div>
+      
+      <div class="info-item">
+        <span class="info-label">解码方式:</span>
+        <span class="info-value" id="decodeMode">硬件解码 (WebCodecs)</span>
+      </div>
+      
+      <div class="log-container" id="logContainer"></div>
+    </div>
+  </div>
+  
+  <script type="module">
+    // 这是一个示例框架，实际使用需要：
+    // 1. 引入libmedia的构建产物
+    // 2. 加载thunder_module.js
+    // 3. 创建ThunderStoneIOLoader
+    
+    class DemoPlayer {
+      constructor() {
+        this.player = null
+        this.thunderModule = null
+        this.initUI()
+        this.loadThunderStone()
+      }
+      
+      initUI() {
+        this.elements = {
+          loadBtn: document.getElementById('loadBtn'),
+          playBtn: document.getElementById('playBtn'),
+          pauseBtn: document.getElementById('pauseBtn'),
+          stopBtn: document.getElementById('stopBtn'),
+          videoUrl: document.getElementById('videoUrl'),
+          statusBadge: document.getElementById('statusBadge'),
+          decryptMode: document.getElementById('decryptMode'),
+          videoCodec: document.getElementById('videoCodec'),
+          resolution: document.getElementById('resolution'),
+          fps: document.getElementById('fps'),
+          decodeMode: document.getElementById('decodeMode'),
+          logContainer: document.getElementById('logContainer')
+        }
+        
+        this.elements.loadBtn.addEventListener('click', () => this.loadVideo())
+        this.elements.playBtn.addEventListener('click', () => this.play())
+        this.elements.pauseBtn.addEventListener('click', () => this.pause())
+        this.elements.stopBtn.addEventListener('click', () => this.stop())
+      }
+      
+      async loadThunderStone() {
+        try {
+          this.log('正在加载ThunderStone WASM模块...', 'info')
+          
+          // 加载thunder_module.js
+          const script = document.createElement('script')
+          script.src = './thunder_module.js'
+          
+          await new Promise((resolve, reject) => {
+            script.onload = resolve
+            script.onerror = () => reject(new Error('加载thunder_module.js失败'))
+            document.head.appendChild(script)
+          })
+          
+          // 等待Module初始化
+          await new Promise((resolve) => {
+            const check = setInterval(() => {
+              if (typeof Module !== 'undefined' && Module._tsInitDecrypt) {
+                clearInterval(check)
+                resolve()
+              }
+            }, 100)
+          })
+          
+          this.thunderModule = Module
+          this.log('✅ ThunderStone WASM加载成功', 'success')
+          this.updateStatus('ready', '就绪')
+          
+        } catch (error) {
+          this.log('❌ ' + error.message, 'error')
+          this.updateStatus('error', '加载失败')
+        }
+      }
+      
+      async loadVideo() {
+        const url = this.elements.videoUrl.value.trim()
+        if (!url) {
+          alert('请输入视频URL')
+          return
+        }
+        
+        if (!this.thunderModule) {
+          alert('ThunderStone WASM未加载')
+          return
+        }
+        
+        try {
+          this.log(`开始加载: ${url}`, 'info')
+          this.updateStatus('loading', '加载中')
+          
+          // TODO: 这里需要实际的libmedia集成代码
+          // 示例代码：
+          /*
+          import FetchIOLoader from 'avnetwork/ioLoader/FetchIOLoader'
+          import ThunderStoneIOLoader from 'avnetwork/ioLoader/ThunderStoneIOLoader'
+          import AVPlayer from 'avplayer/AVPlayer'
+          
+          const baseLoader = new FetchIOLoader({ url })
+          const decryptLoader = new ThunderStoneIOLoader({
+            thunderModule: this.thunderModule,
+            baseLoader
+          })
+          
+          this.player = new AVPlayer({
+            container: document.getElementById('player'),
+            customLoader: decryptLoader
+          })
+          
+          await this.player.load(url)
+          */
+          
+          // 演示模式
+          this.log('⚠️ 演示模式：实际使用需要集成libmedia', 'warning')
+          this.log('✅ 模拟加载成功', 'success')
+          
+          this.elements.decryptMode.textContent = '已启用（ThunderStone WASM）'
+          this.elements.videoCodec.textContent = 'H.264'
+          this.elements.resolution.textContent = '1920x1080'
+          this.elements.fps.textContent = '25 fps'
+          
+          this.updateStatus('ready', '已加载')
+          this.elements.playBtn.disabled = false
+          
+        } catch (error) {
+          this.log('❌ 加载失败: ' + error.message, 'error')
+          this.updateStatus('error', '加载失败')
+        }
+      }
+      
+      play() {
+        this.log('▶️ 开始播放', 'info')
+        this.updateStatus('playing', '播放中')
+        this.elements.playBtn.disabled = true
+        this.elements.pauseBtn.disabled = false
+        this.elements.stopBtn.disabled = false
+        
+        // TODO: this.player.play()
+      }
+      
+      pause() {
+        this.log('⏸️ 暂停播放', 'info')
+        this.updateStatus('ready', '已暂停')
+        this.elements.playBtn.disabled = false
+        this.elements.pauseBtn.disabled = true
+        
+        // TODO: this.player.pause()
+      }
+      
+      stop() {
+        this.log('⏹️ 停止播放', 'info')
+        this.updateStatus('ready', '已停止')
+        this.elements.playBtn.disabled = false
+        this.elements.pauseBtn.disabled = true
+        this.elements.stopBtn.disabled = true
+        
+        // TODO: this.player.stop()
+      }
+      
+      updateStatus(type, text) {
+        this.elements.statusBadge.className = `status status-${type}`
+        this.elements.statusBadge.textContent = text
+      }
+      
+      log(message, level = 'info') {
+        const time = new Date().toLocaleTimeString()
+        const entry = document.createElement('div')
+        entry.className = 'log-entry'
+        entry.innerHTML = `
+          <span class="log-time">[${time}]</span>
+          <span class="log-${level}">${message}</span>
+        `
+        this.elements.logContainer.appendChild(entry)
+        this.elements.logContainer.scrollTop = this.elements.logContainer.scrollHeight
+      }
+    }
+    
+    // 启动演示
+    const demo = new DemoPlayer()
+  </script>
+</body>
+</html>

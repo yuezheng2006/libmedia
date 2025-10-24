@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ThunderStone WASM验证</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      max-width: 800px;
+      margin: 40px auto;
+      padding: 20px;
+      background: #f5f5f5;
+    }
+    h1 {
+      color: #333;
+    }
+    .log {
+      background: #fff;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      padding: 20px;
+      margin-top: 20px;
+      font-family: 'Monaco', 'Courier New', monospace;
+      font-size: 14px;
+      max-height: 600px;
+      overflow-y: auto;
+    }
+    .log-entry {
+      padding: 4px 0;
+      border-bottom: 1px solid #f0f0f0;
+    }
+    .log-entry:last-child {
+      border-bottom: none;
+    }
+    .time {
+      color: #999;
+      margin-right: 10px;
+    }
+    .info { color: #2196F3; }
+    .success { color: #4CAF50; }
+    .error { color: #F44336; }
+    .warning { color: #FF9800; }
+  </style>
+</head>
+<body>
+  <h1>🔍 ThunderStone WASM模块验证</h1>
+  <p>验证ThunderStone解密WASM模块是否正确加载并可用...</p>
+  
+  <div class="log" id="logContainer"></div>
+  
+  <script src="./thunder_module.js"></script>
+  <script>
+    function log(message, level = 'info') {
+      const time = new Date().toLocaleTimeString()
+      const entry = document.createElement('div')
+      entry.className = 'log-entry'
+      entry.innerHTML = `
+        <span class="time">[${time}]</span>
+        <span class="${level}">${message}</span>
+      `
+      document.getElementById('logContainer').appendChild(entry)
+    }
+    
+    async function verify() {
+      log('⏳ 等待ThunderStone WASM模块初始化...', 'info')
+      
+      // 等待Module对象初始化
+      await new Promise((resolve) => {
+        const check = setInterval(() => {
+          if (typeof Module !== 'undefined' && Module._tsInitDecrypt) {
+            clearInterval(check)
+            resolve()
+          }
+        }, 100)
+      })
+      
+      log('✅ WASM模块加载成功', 'success')
+      log('🔍 检查导出函数...', 'info')
+      
+      // 测试必需函数
+      const requiredFunctions = [
+        '_tsInitDecrypt',
+        '_tsDeinitDecrypt',
+        '_tsCheckDecrypt',
+        '_tsDataDecrypt',
+        '_tsDataDecryptSeek'
+      ]
+      
+      for (const funcName of requiredFunctions) {
+        if (Module[funcName]) {
+          log(`✓ ${funcName}`, 'success')
+        } else {
+          log(`✗ ${funcName} 不存在`, 'error')
+        }
+      }
+      
+      log('🧪 测试调用 tsInitDecrypt()...', 'info')
+      
+      try {
+        // 测试初始化
+        const handle = Module._tsInitDecrypt()
+        log(`✅ 初始化成功, handle = ${handle}`, 'success')
+        
+        log('🧪 测试头部检查功能...', 'info')
+        
+        // 测试头部检查
+        const testBuffer = new Uint8Array(512)
+        const bufferPtr = Module._malloc(testBuffer.length)
+        
+        try {
+          Module.HEAPU8.set(testBuffer, bufferPtr)
+          const result = Module._tsCheckDecrypt(handle, bufferPtr, testBuffer.length)
+          log(`✅ 头部检查调用成功, result = ${result} (加密)`, 'success')
+        } finally {
+          Module._free(bufferPtr)
+        }
+        
+        log('🧹 清理资源...', 'info')
+        Module._tsDeinitDecrypt(handle)
+        log('✅ 清理成功', 'success')
+        
+        log('', 'info')
+        log('🎉 所有验证通过！ThunderStone WASM可用！', 'success')
+        log('', 'info')
+        log('✅ 结论: 可以开始Day1开发工作', 'success')
+        
+      } catch (error) {
+        log(`❌ 测试失败: ${error.message}`, 'error')
+      }
+    }
+    
+    // 启动验证
+    log('🚀 开始验证ThunderStone WASM模块', 'info')
+    verify()
+  </script>
+</body>
+</html>

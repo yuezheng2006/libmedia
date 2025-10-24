@@ -1,0 +1,7 @@
+/Users/vincentyang/Documents/Github/libmedia/libmedia/wasm/thunder-demuxer/build/CMakeFiles/thunder_module.dir
+/Users/vincentyang/Documents/Github/libmedia/libmedia/wasm/thunder-demuxer/build/CMakeFiles/edit_cache.dir
+/Users/vincentyang/Documents/Github/libmedia/libmedia/wasm/thunder-demuxer/build/CMakeFiles/rebuild_cache.dir
+/Users/vincentyang/Documents/Github/libmedia/libmedia/wasm/thunder-demuxer/build/CMakeFiles/list_install_components.dir
+/Users/vincentyang/Documents/Github/libmedia/libmedia/wasm/thunder-demuxer/build/CMakeFiles/install.dir
+/Users/vincentyang/Documents/Github/libmedia/libmedia/wasm/thunder-demuxer/build/CMakeFiles/install/local.dir
+/Users/vincentyang/Documents/Github/libmedia/libmedia/wasm/thunder-demuxer/build/CMakeFiles/install/strip.dir

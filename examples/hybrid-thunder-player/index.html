@@ -1,0 +1,654 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>混合播放器 | Thunder鉴权 + ThunderStone解密 + libmedia硬解码</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      padding: 20px;
+    }
+
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+    }
+
+    .header {
+      text-align: center;
+      color: white;
+      margin-bottom: 30px;
+    }
+
+    .header h1 {
+      font-size: 36px;
+      font-weight: 700;
+      margin-bottom: 12px;
+      text-shadow: 0 2px 10px rgba(0,0,0,0.2);
+    }
+
+    .subtitle {
+      font-size: 16px;
+      opacity: 0.95;
+      margin-bottom: 16px;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 6px 14px;
+      border-radius: 14px;
+      font-size: 13px;
+      font-weight: 600;
+      margin: 0 5px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    }
+
+    .badge-auth { background: #10b981; color: white; }
+    .badge-decrypt { background: #f59e0b; color: white; }
+    .badge-hardware { background: #3b82f6; color: white; }
+
+    .main-grid {
+      display: grid;
+      grid-template-columns: 1fr 400px;
+      gap: 20px;
+    }
+
+    .card {
+      background: white;
+      border-radius: 16px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+      overflow: hidden;
+    }
+
+    .video-card {
+      grid-column: 1;
+    }
+
+    .video-container {
+      position: relative;
+      width: 100%;
+      padding-top: 56.25%;
+      background: #000;
+    }
+
+    #videoContainer {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+    }
+
+    .controls {
+      padding: 24px;
+    }
+
+    .input-group {
+      margin-bottom: 20px;
+    }
+
+    .input-group label {
+      display: block;
+      font-size: 14px;
+      font-weight: 600;
+      color: #374151;
+      margin-bottom: 10px;
+    }
+
+    .input-group input {
+      width: 100%;
+      padding: 14px 16px;
+      border: 2px solid #e5e7eb;
+      border-radius: 10px;
+      font-size: 14px;
+      transition: all 0.2s;
+    }
+
+    .input-group input:focus {
+      outline: none;
+      border-color: #667eea;
+      box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.1);
+    }
+
+    .button-group {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    button {
+      padding: 13px 26px;
+      border: none;
+      border-radius: 10px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+    }
+
+    .btn-primary:hover:not(:disabled) {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 16px rgba(102, 126, 234, 0.4);
+    }
+
+    .btn-success {
+      background: #10b981;
+      color: white;
+    }
+
+    .btn-danger {
+      background: #ef4444;
+      color: white;
+    }
+
+    .sidebar {
+      grid-column: 2;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .info-panel {
+      background: white;
+      border-radius: 16px;
+      padding: 24px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+    }
+
+    .panel-title {
+      font-size: 18px;
+      font-weight: 700;
+      color: #111827;
+      margin-bottom: 20px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .status-grid {
+      display: grid;
+      gap: 16px;
+    }
+
+    .status-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px;
+      background: #f9fafb;
+      border-radius: 8px;
+    }
+
+    .status-label {
+      font-size: 13px;
+      color: #6b7280;
+      font-weight: 500;
+    }
+
+    .status-value {
+      font-size: 13px;
+      font-weight: 600;
+      padding: 4px 10px;
+      border-radius: 6px;
+    }
+
+    .status-success { background: #d1fae5; color: #065f46; }
+    .status-pending { background: #fef3c7; color: #92400e; }
+    .status-error { background: #fee2e2; color: #991b1b; }
+    .status-info { background: #dbeafe; color: #1e40af; }
+
+    .samples {
+      background: #f3f4f6;
+      border-radius: 10px;
+      padding: 16px;
+      margin-top: 16px;
+    }
+
+    .sample-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: #6b7280;
+      margin-bottom: 12px;
+    }
+
+    .sample-item {
+      padding: 12px 14px;
+      background: white;
+      border-radius: 8px;
+      margin-bottom: 8px;
+      cursor: pointer;
+      font-size: 13px;
+      transition: all 0.2s;
+      border: 2px solid transparent;
+    }
+
+    .sample-item:hover {
+      border-color: #667eea;
+      background: #f0f4ff;
+      transform: translateX(4px);
+    }
+
+    .log-panel {
+      background: #1f2937;
+      border-radius: 16px;
+      padding: 20px;
+      max-height: 500px;
+      overflow-y: auto;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+    }
+
+    .log-title {
+      color: white;
+      font-size: 16px;
+      font-weight: 700;
+      margin-bottom: 16px;
+    }
+
+    .log-entry {
+      font-family: 'Monaco', 'Courier New', monospace;
+      font-size: 12px;
+      padding: 8px 0;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      line-height: 1.6;
+    }
+
+    .log-time {
+      color: #9ca3af;
+      margin-right: 10px;
+    }
+
+    .log-info { color: #60a5fa; }
+    .log-success { color: #34d399; }
+    .log-warn { color: #fbbf24; }
+    .log-error { color: #f87171; }
+
+    @media (max-width: 1200px) {
+      .main-grid {
+        grid-template-columns: 1fr;
+      }
+      .sidebar {
+        grid-column: 1;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>🎬 混合播放器示例</h1>
+      <p class="subtitle">
+        <span class="badge badge-auth">✓ Thunder鉴权</span>
+        <span class="badge badge-decrypt">✓ ThunderStone解密</span>
+        <span class="badge badge-hardware">✓ libmedia硬解码</span>
+      </p>
+    </div>
+
+    <div class="main-grid">
+      <!-- 左侧：播放器 -->
+      <div class="video-card card">
+        <div class="video-container">
+          <div id="videoContainer"></div>
+        </div>
+
+        <div class="controls">
+          <div class="input-group">
+            <label>📹 视频地址</label>
+            <input 
+              type="text" 
+              id="videoUrl" 
+              placeholder="输入ThunderStone加密视频URL..."
+              value="https://qnktv.ktvdaren.com/tempmls/convert/20250407/4115794.ts"
+            />
+          </div>
+
+          <div class="samples">
+            <div class="sample-title">🔐 测试视频（ThunderStone加密）</div>
+            <div class="sample-item" onclick="fillUrl('https://qnktv.ktvdaren.com/tempmls/convert/20250407/4115794.ts')">
+              🎵 追梦的心 (加密TS)
+            </div>
+            <div class="sample-item" onclick="fillUrl('https://qnktv.ktvdaren.com/tempmls/convert/20250407/4116492.ts')">
+              🎵 东北话 (加密TS)
+            </div>
+          </div>
+
+          <div class="button-group">
+            <button id="initBtn" class="btn-primary" onclick="initSystem()">
+              🚀 初始化系统
+            </button>
+            <button id="loadBtn" class="btn-success" onclick="loadAndPlay()" disabled>
+              ▶️ 加载并播放
+            </button>
+            <button id="stopBtn" class="btn-danger" onclick="stopPlayback()" disabled>
+              ⏹️ 停止
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 右侧：信息面板 -->
+      <div class="sidebar">
+        <div class="info-panel">
+          <div class="panel-title">📊 系统状态</div>
+          <div class="status-grid">
+            <div class="status-item">
+              <span class="status-label">鉴权状态</span>
+              <span class="status-value status-pending" id="authStatus">未初始化</span>
+            </div>
+            <div class="status-item">
+              <span class="status-label">WASM模块</span>
+              <span class="status-value status-pending" id="wasmStatus">未加载</span>
+            </div>
+            <div class="status-item">
+              <span class="status-label">播放器</span>
+              <span class="status-value status-pending" id="playerStatus">未初始化</span>
+            </div>
+            <div class="status-item">
+              <span class="status-label">解密模式</span>
+              <span class="status-value status-info" id="decryptMode">-</span>
+            </div>
+            <div class="status-item">
+              <span class="status-label">解码方式</span>
+              <span class="status-value status-info" id="decodeMode">-</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="log-panel">
+          <div class="log-title">📝 运行日志</div>
+          <div id="logContainer"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 依赖加载 -->
+  <!-- 1. ThunderStone WASM模块 -->
+  <script src="../thunder-decrypt/thunder_module.js"></script>
+  
+  <!-- 2. Thunder Player SDK（用于鉴权） -->
+  <script src="../../.temp/thunderwebplayer/packages/webplayer-vue/public/js/common.js"></script>
+  <script src="../../.temp/thunderwebplayer/packages/webplayer-vue/public/js/pcm-player.js"></script>
+  <script src="../../.temp/thunderwebplayer/packages/webplayer-vue/public/js/webgl.js"></script>
+  <script src="../../.temp/thunderwebplayer/packages/webplayer-vue/public/js/player.js"></script>
+  
+  <!-- 3. libmedia AVPlayer -->
+  <script src="../../dist/avplayer/avplayer.js"></script>
+
+  <!-- 4. 混合播放器组件 -->
+  <script src="./ThunderAuthAdapter.js"></script>
+  <script src="./HybridThunderStoneIOLoader.js"></script>
+
+  <script>
+    // ============================================
+    // 全局状态
+    // ============================================
+    const state = {
+      authAdapter: null,
+      player: null,
+      currentLoader: null,
+      isInitialized: false
+    }
+
+    // ============================================
+    // 工具函数
+    // ============================================
+    function log(message, type = 'info') {
+      const time = new Date().toLocaleTimeString()
+      const entry = document.createElement('div')
+      entry.className = `log-entry log-${type}`
+      entry.innerHTML = `<span class="log-time">[${time}]</span>${message}`
+      
+      const container = document.getElementById('logContainer')
+      container.appendChild(entry)
+      container.scrollTop = container.scrollHeight
+      
+      console.log(`[${type.toUpperCase()}]`, message)
+    }
+
+    function updateStatus(id, text, className) {
+      const el = document.getElementById(id)
+      el.textContent = text
+      el.className = `status-value ${className}`
+    }
+
+    function fillUrl(url) {
+      document.getElementById('videoUrl').value = url
+      log(`URL已填充: ${url.split('/').pop()}`, 'info')
+    }
+
+    // ============================================
+    // 步骤1：初始化系统
+    // ============================================
+    async function initSystem() {
+      try {
+        log('═'.repeat(50), 'info')
+        log('🚀 开始初始化混合播放器系统...', 'info')
+        
+        document.getElementById('initBtn').disabled = true
+
+        // 1. 检查依赖
+        log('📦 检查依赖加载状态...', 'info')
+        
+        // Emscripten导出的全局变量是 Module，不是 ThunderModule
+        if (typeof Module === 'undefined') {
+          throw new Error('ThunderStone WASM模块未加载（全局变量 Module 不存在）')
+        }
+        if (!Module._tsInitDecrypt) {
+          throw new Error('ThunderStone WASM模块缺少解密函数')
+        }
+        log('  ✓ ThunderStone WASM', 'success')
+        updateStatus('wasmStatus', '已加载', 'status-success')
+        
+        // 保存到全局以便其他代码使用
+        window.ThunderModule = Module
+
+        if (typeof window.Player === 'undefined') {
+          throw new Error('Thunder Player SDK未加载')
+        }
+        log('  ✓ Thunder Player SDK', 'success')
+
+        if (typeof AVPlayer === 'undefined') {
+          throw new Error('libmedia AVPlayer未加载')
+        }
+        log('  ✓ libmedia AVPlayer', 'success')
+
+        // 2. 初始化Thunder鉴权
+        log('🔐 初始化Thunder鉴权...', 'info')
+        updateStatus('authStatus', '初始化中...', 'status-pending')
+
+        state.authAdapter = new ThunderAuthAdapter()
+        const authResult = await state.authAdapter.init({
+          appid: 'b72d8f35e1c7abde45f69c82d7314590',
+          uid: `libmedia-${Date.now()}`,
+          sdk_sn: 'demo-sdk-sn-001'
+        })
+
+        if (!authResult) {
+          throw new Error('Thunder鉴权失败')
+        }
+
+        log('  ✓ Thunder鉴权成功', 'success')
+        updateStatus('authStatus', '已鉴权', 'status-success')
+
+        // 3. 创建libmedia播放器
+        log('🎬 创建libmedia播放器...', 'info')
+        updateStatus('playerStatus', '创建中...', 'status-pending')
+
+        state.player = new AVPlayer({
+          container: document.getElementById('videoContainer'),
+          enableWorker: true, // 启用Worker多线程
+          enableWebCodecs: true // 启用硬解码
+        })
+        
+        // 监听播放器事件
+        state.player.on('loaded', () => {
+          log('✅ [播放器] 视频加载成功', 'success')
+          console.log('🎬 [播放器事件] loaded')
+        })
+        
+        state.player.on('playing', () => {
+          log('▶️ [播放器] 开始播放', 'success')
+          console.log('🎬 [播放器事件] playing')
+        })
+        
+        state.player.on('paused', () => {
+          log('⏸️ [播放器] 已暂停', 'info')
+          console.log('🎬 [播放器事件] paused')
+        })
+        
+        state.player.on('error', (error) => {
+          log(`❌ [播放器] 播放器错误: ${error.message || error}`, 'error')
+          console.error('🎬 [播放器事件] error:', error)
+          console.error('🎬 [播放器事件] error.stack:', error.stack)
+        })
+              
+        state.player.on('timeupdate', (time) => {
+          console.log(`⏱️ [播放器事件] timeupdate: ${time.toFixed(2)}s`)
+        })
+              
+        state.player.on('seeking', () => {
+          console.log('🎬 [播放器事件] seeking')
+        })
+              
+        state.player.on('seeked', () => {
+          console.log('🎬 [播放器事件] seeked')
+        })
+              
+        state.player.on('ended', () => {
+          log('🏁 [播放器] 播放结束', 'info')
+          console.log('🎬 [播放器事件] ended')
+        })
+
+        log('  ✓ libmedia播放器创建成功', 'success')
+        updateStatus('playerStatus', '就绪', 'status-success')
+        updateStatus('decodeMode', 'WebCodecs硬解', 'status-success')
+
+        // 4. 完成初始化
+        state.isInitialized = true
+        document.getElementById('loadBtn').disabled = false
+        
+        log('═'.repeat(50), 'info')
+        log('✅ 系统初始化完成！可以开始播放了', 'success')
+        log('═'.repeat(50), 'info')
+
+      } catch (error) {
+        log(`❌ 初始化失败: ${error.message}`, 'error')
+        updateStatus('authStatus', '失败', 'status-error')
+        updateStatus('playerStatus', '失败', 'status-error')
+        document.getElementById('initBtn').disabled = false
+      }
+    }
+
+    // ============================================
+    // 步骤2：加载并播放视频
+    // ============================================
+    async function loadAndPlay() {
+      if (!state.isInitialized) {
+        log('⚠️ 请先初始化系统', 'warn')
+        return
+      }
+
+      try {
+        const url = document.getElementById('videoUrl').value.trim()
+        if (!url) {
+          log('⚠️ 请输入视频URL', 'warn')
+          return
+        }
+
+        log('═'.repeat(50), 'info')
+        log(`🎵 开始加载视频: ${url.split('/').pop()}`, 'info')
+
+        document.getElementById('loadBtn').disabled = true
+        document.getElementById('stopBtn').disabled = false
+
+        // 1. 创建混合IOLoader
+        log('🔧 创建HybridThunderStoneIOLoader...', 'info')
+        state.currentLoader = new HybridThunderStoneIOLoader({
+          url: url,
+          thunderModule: window.ThunderModule || Module
+        })
+
+        // 2. 加载视频
+        log('📥 [播放器] 加载视频到播放器...', 'info')
+        console.log('🚀 [播放器] 调用 player.load(loader)')
+        console.log('🚀 [播放器] IOLoader:', state.currentLoader)
+        
+        await state.player.load(state.currentLoader, {
+          // 可选配置
+          isLive: false,
+          enableHardware: true
+        })
+        
+        console.log('✅ [播放器] load()返回成功')
+        log('  ✓ 视频加载成功', 'success')
+
+        // 3. 开始播放
+        log('▶️ 开始播放...', 'info')
+        await state.player.play()
+
+        // 4. 更新状态
+        const decryptMode = state.currentLoader.isEncrypted ? '✓ ThunderStone解密' : '○ 明文'
+        updateStatus('decryptMode', decryptMode, state.currentLoader.isEncrypted ? 'status-success' : 'status-info')
+
+        log('═'.repeat(50), 'info')
+        log('✅ 播放成功！', 'success')
+        log('═'.repeat(50), 'info')
+
+      } catch (error) {
+        log(`❌ 播放失败: ${error.message}`, 'error')
+        console.error('详细错误:', error)
+        document.getElementById('loadBtn').disabled = false
+        document.getElementById('stopBtn').disabled = true
+      }
+    }
+
+    // ============================================
+    // 步骤3：停止播放
+    // ============================================
+    async function stopPlayback() {
+      try {
+        log('⏹️ 停止播放...', 'info')
+
+        if (state.player) {
+          await state.player.pause()
+        }
+
+        document.getElementById('loadBtn').disabled = false
+        document.getElementById('stopBtn').disabled = true
+
+        log('✓ 已停止', 'success')
+      } catch (error) {
+        log(`❌ 停止失败: ${error.message}`, 'error')
+      }
+    }
+
+    // ============================================
+    // 页面加载完成
+    // ============================================
+    window.addEventListener('DOMContentLoaded', () => {
+      log('🌐 页面加载完成，准备就绪', 'info')
+      log('📖 请点击"初始化系统"开始', 'info')
+    })
+  </script>
+</body>
+</html>
