@@ -43,9 +43,55 @@
       }
       .stats {
         margin-left: 10px;
+        margin-top: 20px;
       }
       .stats-text {
         color: #1795FF;
+        font-weight: bold;
+      }
+      .stats-text.good {
+        color: #67C23A;
+      }
+      .stats-text.warning {
+        color: #E6A23C;
+      }
+      .stats-text.danger {
+        color: #F56C6C;
+      }
+      .stats-title {
+        font-size: 18px;
+        font-weight: bold;
+        color: #303133;
+        margin-bottom: 15px;
+        border-bottom: 2px solid #1795FF;
+        padding-bottom: 10px;
+      }
+      .stats-section {
+        margin-bottom: 20px;
+      }
+      .stats-section-title {
+        font-size: 14px;
+        font-weight: bold;
+        color: #606266;
+        margin: 15px 0 10px 0;
+        background-color: #f5f7fa;
+        padding: 8px 12px;
+        border-left: 4px solid #1795FF;
+      }
+      .stats-item {
+        display: flex;
+        align-items: center;
+        padding: 5px 0;
+      }
+      .stats-label {
+        min-width: 150px;
+        color: #606266;
+      }
+      .stats-tip {
+        margin-left: 15px;
+        font-size: 12px;
+        color: #909399;
+        font-style: italic;
       }
 
       .player {
@@ -238,31 +284,40 @@
 
     <div class="options">
       <div id="isLive">
-        <el-checkbox v-model="isLive">isLive</el-checkbox>
+        <el-checkbox v-model="isLive">直播模式（isLive）</el-checkbox>
+        <span style="color: #909399; font-size: 12px; margin-left: 10px;">勾选表示直播流，不勾选表示点播文件</span>
       </div>
       <div id="enableSimd">
-        <el-checkbox v-model="enableSimd">enable simd</el-checkbox>
+        <el-checkbox v-model="enableSimd">启用 SIMD 加速</el-checkbox>
+        <span style="color: #909399; font-size: 12px; margin-left: 10px;">使用 WebAssembly SIMD 向量指令加速解码，性能最高</span>
       </div>
       <div id="enableWebCodecs">
-        <el-checkbox v-model="enableWebCodecs">enable WebCodecs</el-checkbox>
+        <el-checkbox v-model="enableWebCodecs">启用 WebCodecs 硬解</el-checkbox>
+        <span style="color: #909399; font-size: 12px; margin-left: 10px;">使用浏览器原生编解码 API，支持硬件加速</span>
       </div>
       <div id="enableHardwareAcceleration">
-        <el-checkbox v-model="enableHardwareAcceleration">enable hardwareAcceleration</el-checkbox>
+        <el-checkbox v-model="enableHardwareAcceleration">启用硬件加速</el-checkbox>
+        <span style="color: #909399; font-size: 12px; margin-left: 10px;">使用 GPU 硬件加速解码（需浏览器支持）</span>
       </div>
       <div id="enableWorker">
-        <el-checkbox v-model="enableWorker">enable Worker</el-checkbox>
+        <el-checkbox v-model="enableWorker">启用 Worker 多线程</el-checkbox>
+        <span style="color: #909399; font-size: 12px; margin-left: 10px;">使用 Web Worker 多线程处理，提升性能</span>
       </div>
       <div id="useMse">
-        <el-checkbox v-model="useMse">use MSE</el-checkbox>
+        <el-checkbox v-model="useMse">使用 MSE 播放</el-checkbox>
+        <span style="color: #909399; font-size: 12px; margin-left: 10px;">使用 Media Source Extensions 播放（适合流媒体）</span>
       </div>
       <div id="enableWebGPU">
-        <el-checkbox v-model="enableWebGPU">enable WebGPU</el-checkbox>
+        <el-checkbox v-model="enableWebGPU">启用 WebGPU 渲染</el-checkbox>
+        <span style="color: #909399; font-size: 12px; margin-left: 10px;">使用 WebGPU 进行视频渲染，性能更好</span>
       </div>
       <div id="loop">
-        <el-checkbox v-model="loop">loop</el-checkbox>
+        <el-checkbox v-model="loop">循环播放</el-checkbox>
+        <span style="color: #909399; font-size: 12px; margin-left: 10px;">播放结束后自动重新开始</span>
       </div>
       <div id="mediaStreamMode">
-        <el-checkbox v-model="mediaStreamMode">mediaStreamMode</el-checkbox>
+        <el-checkbox v-model="mediaStreamMode">MediaStream 模式</el-checkbox>
+        <span style="color: #909399; font-size: 12px; margin-left: 10px;">使用 MediaStream 方式播放</span>
       </div>
 
       <br>
@@ -358,27 +413,28 @@
     </div>
 
     <div class="renderMode">
-      <span class="label">renderMode: </span>
+      <span class="label">渲染模式: </span>
       <div id="renderMode" style="display: inline-block;">
         <el-radio v-model="radio" label="0">适应</el-radio>
         <el-radio v-model="radio" label="1">填充</el-radio>
       </div>
+      <span style="color: #909399; font-size: 12px; margin-left: 10px;">适应=保持比例，填充=拉伸填满</span>
     </div>
 
     <div class="renderRotate">
-      <span class="label">renderRotate: </span>
+      <span class="label">画面旋转: </span>
       <div id="renderRotate" style="display: inline-block;">
-        <el-radio v-model="radio" label="0">0</el-radio>
-        <el-radio v-model="radio" label="90">90</el-radio>
-        <el-radio v-model="radio" label="180">180</el-radio>
-        <el-radio v-model="radio" label="270">270</el-radio>
+        <el-radio v-model="radio" label="0">0°</el-radio>
+        <el-radio v-model="radio" label="90">90°</el-radio>
+        <el-radio v-model="radio" label="180">180°</el-radio>
+        <el-radio v-model="radio" label="270">270°</el-radio>
       </div>
     </div>
 
-    <button id="load" class="load" onclick="loadPlayer('#canvas-background')" disabled>Load</button>
-    <button class="play" onclick="playPlayer()" >play</button>
-    <button class="play" onclick="pausePlayer()" >pause</button>
-    <button class="play" onclick="stopPlayer()" >stop</button>
+    <button id="load" class="load" onclick="loadPlayer('#canvas-background')" disabled>加载视频</button>
+    <button class="play" onclick="playPlayer()" >播放</button>
+    <button class="play" onclick="pausePlayer()" >暂停</button>
+    <button class="play" onclick="stopPlayer()" >停止</button>
     <button onclick="clickAddSubtitle()">添加字幕</button>
     <input id="subtitleFile" type="file" onchange="addSubtitle(this)" style="display: none;" />
     <!-- <button onclick="openWriteFile()" >write file</button> -->
@@ -387,96 +443,157 @@
       <button onclick="addVolume()">音量 +</button>
       <button onclick="subVolume()">音量 -</button>
       <button onclick="enterFullscreen()">全屏</button>
-      <button onclick="resume()">resume</button>
+      <button onclick="resume()">恢复音频</button>
       <button onclick="nextFrame()">下一帧</button>
+      <button onclick="diagnosticSync()" style="background-color: #E6A23C; color: white;">🔍 同步诊断</button>
     </div>
 
     <br/>
 
     <div class="stats">
-      <div class="stats-item">
-        audiocodec: <span id="audiocodec" class="stats-text"></span>
+      <div class="stats-title">📊 播放统计信息</div>
+      
+      <div class="stats-section">
+        <div class="stats-section-title">🎬 基础信息</div>
+        <div class="stats-item">
+          <span class="stats-label">音频编码:</span>
+          <span id="audiocodec" class="stats-text"></span>
+          <span class="stats-tip">音频编码格式（AAC/MP3/Opus等）</span>
+        </div>
+        <div class="stats-item">
+          <span class="stats-label">视频编码:</span>
+          <span id="videocodec" class="stats-text"></span>
+          <span class="stats-tip">视频编码格式（H264/HEVC/AV1等）</span>
+        </div>
+        <div class="stats-item">
+          <span class="stats-label">分辨率:</span>
+          <span id="width" class="stats-text">0</span> x <span id="height" class="stats-text">0</span>
+          <span class="stats-tip">视频画面宽度和高度（像素）</span>
+        </div>
+        <div class="stats-item">
+          <span class="stats-label">音频声道:</span>
+          <span id="channels" class="stats-text">0</span> 声道
+          <span class="stats-tip">1=单声道 2=立体声 6=5.1环绕</span>
+        </div>
+        <div class="stats-item">
+          <span class="stats-label">采样率:</span>
+          <span id="sampleRate" class="stats-text">0</span> Hz
+          <span class="stats-tip">音频采样频率（44100/48000Hz）</span>
+        </div>
       </div>
-      <div class="stats-item">
-        videocodec: <span id="videocodec" class="stats-text"></span>
+      <div class="stats-section">
+        <div class="stats-section-title">⚡ 性能指标</div>
+        <div class="stats-item">
+          <span class="stats-label">音视同步差:</span>
+          <span id="A_V" class="stats-text">0</span> ms
+          <span class="stats-tip">音视频同步程度，越接近0越好</span>
+        </div>
+        <div class="stats-item">
+          <span class="stats-label">音频卡顿次数:</span>
+          <span id="audioStutter" class="stats-text">0</span> 次
+          <span class="stats-tip">音频播放卡顿的累计次数</span>
+        </div>
+        <div class="stats-item">
+          <span class="stats-label">视频卡顿次数:</span>
+          <span id="videoStutter" class="stats-text">0</span> 次
+          <span class="stats-tip">视频播放卡顿的累计次数</span>
+        </div>
+        <div class="stats-item">
+          <span class="stats-label">视频渲染帧率:</span>
+          <span id="videoRenderFramerate" class="stats-text">0</span> fps
+          <span class="stats-tip">实际渲染显示的帧率</span>
+        </div>
+        <div class="stats-item">
+          <span class="stats-label">视频解码帧率:</span>
+          <span id="videoDecodeFramerate" class="stats-text">0</span> fps
+          <span class="stats-tip">解码器处理视频帧的速度</span>
+        </div>
+        <div class="stats-item">
+          <span class="stats-label">音频渲染帧率:</span>
+          <span id="audioRenderFramerate" class="stats-text">0</span> fps
+          <span class="stats-tip">音频帧的渲染速度</span>
+        </div>
+        <div class="stats-item">
+          <span class="stats-label">音频解码帧率:</span>
+          <span id="audioDecodeFramerate" class="stats-text">0</span> fps
+          <span class="stats-tip">解码器处理音频帧的速度</span>
+        </div>
       </div>
-      <div class="stats-item">
-        width: <span id="width" class="stats-text">0</span>
+      <div class="stats-section">
+        <div class="stats-section-title">🌐 网络与码率</div>
+        <div class="stats-item">
+          <span class="stats-label">带宽:</span>
+          <span id="bandwidth" class="stats-text">0</span> kbps
+          <span class="stats-tip">总带宽使用（音频+视频）</span>
+        </div>
+        <div class="stats-item">
+          <span class="stats-label">音频码率:</span>
+          <span id="audioBitrate" class="stats-text">0</span> kbps
+          <span class="stats-tip">音频流的码率</span>
+        </div>
+        <div class="stats-item">
+          <span class="stats-label">视频码率:</span>
+          <span id="videoBitrate" class="stats-text">0</span> kbps
+          <span class="stats-tip">视频流的码率</span>
+        </div>
+        <div class="stats-item">
+          <span class="stats-label">音频缓冲队列:</span>
+          <span id="audioPacketQueueLength" class="stats-text">0</span> 个
+          <span class="stats-tip">等待解码的音频包数量</span>
+        </div>
+        <div class="stats-item">
+          <span class="stats-label">视频缓冲队列:</span>
+          <span id="videoPacketQueueLength" class="stats-text">0</span> 个
+          <span class="stats-tip">等待解码的视频包数量</span>
+        </div>
       </div>
-      <div class="stats-item">
-        height: <span id="height" class="stats-text">0</span>
-      </div>
-      <div class="stats-item">
-        channels: <span id="channels" class="stats-text">0</span>
-      </div>
-      <div class="stats-item">
-        sampleRate: <span id="sampleRate" class="stats-text">0</span>
-      </div>
-      <div class="stats-item">
-        audioStutter: <span id="audioStutter" class="stats-text">0</span>
-      </div>
-      <div class="stats-item">
-        videoStutter: <span id="videoStutter" class="stats-text">0</span>
-      </div>
-      <div class="stats-item">
-        A-V: <span id="A_V" class="stats-text">0</span> ms
-      </div>
-      <div class="stats-item">
-        bandwidth: <span id="bandwidth" class="stats-text">0</span> kbps
-      </div>
-      <div class="stats-item">
-        audioBitrate: <span id="audioBitrate" class="stats-text">0</span> kbps
-      </div>
-      <div class="stats-item">
-        videoBitrate: <span id="videoBitrate" class="stats-text">0</span> kbps
-      </div>
-      <div class="stats-item">
-        jitterMin: <span id="jitterMin" class="stats-text">0</span>
-      </div>
-      <div class="stats-item">
-        jitterMax: <span id="jitterMax" class="stats-text">0</span>
-      </div>
-      <div class="stats-item">
-        audioPacketQueueLength: <span id="audioPacketQueueLength" class="stats-text">0</span>
-      </div>
-      <div class="stats-item">
-        videoPacketQueueLength: <span id="videoPacketQueueLength" class="stats-text">0</span>
-      </div>
-      <div class="stats-item">
-        videoEncodeFramerate: <span id="videoEncodeFramerate" class="stats-text">0</span>
-      </div>
-      <div class="stats-item">
-        videoDecodeFramerate: <span id="videoDecodeFramerate" class="stats-text">0</span>
-      </div>
-      <div class="stats-item">
-        videoRenderFramerate: <span id="videoRenderFramerate" class="stats-text">0</span>
-      </div>
-      <div class="stats-item">
-        keyFrameInterval: <span id="keyFrameInterval" class="stats-text">0</span>
-      </div>
-      <div class="stats-item">
-        audioEncodeFramerate: <span id="audioEncodeFramerate" class="stats-text">0</span>
-      </div>
-      <div class="stats-item">
-        audioDecodeFramerate: <span id="audioDecodeFramerate" class="stats-text">0</span>
-      </div>
-      <div class="stats-item">
-        audioRenderFramerate: <span id="audioRenderFramerate" class="stats-text">0</span>
-      </div>
-      <div class="stats-item">
-        audioFrameDecodeIntervalMax: <span id="audioFrameDecodeIntervalMax" class="stats-text">0</span>
-      </div>
-      <div class="stats-item">
-        audioFrameRenderIntervalMax: <span id="audioFrameRenderIntervalMax" class="stats-text">0</span>
-      </div>
-      <div class="stats-item">
-        videoFrameDecodeIntervalMax: <span id="videoFrameDecodeIntervalMax" class="stats-text">0</span>
-      </div>
-      <div class="stats-item">
-        videoFrameRenderIntervalMax: <span id="videoFrameRenderIntervalMax" class="stats-text">0</span>
-      </div>
-      <div class="stats-item">
-        jitter: <span id="jitter" class="stats-text">0</span>
+      <div class="stats-section">
+        <div class="stats-section-title">🔍 高级指标</div>
+        <div class="stats-item">
+          <span class="stats-label">关键帧间隔:</span>
+          <span id="keyFrameInterval" class="stats-text">0</span> 帧
+          <span class="stats-tip">GOP大小，影响 seek 精度</span>
+        </div>
+        <div class="stats-item">
+          <span class="stats-label">抖动缓冲区间:</span>
+          <span id="jitterMin" class="stats-text">0</span> ~ <span id="jitterMax" class="stats-text">0</span>
+          <span class="stats-tip">缓冲区最小/最大值</span>
+        </div>
+        <div class="stats-item">
+          <span class="stats-label">当前网络抖动:</span>
+          <span id="jitter" class="stats-text">0</span>
+          <span class="stats-tip">网络传输的抖动程度</span>
+        </div>
+        <div class="stats-item">
+          <span class="stats-label">视频解码最大间隔:</span>
+          <span id="videoFrameDecodeIntervalMax" class="stats-text">0</span> ms
+          <span class="stats-tip">解码两帧间最大时间</span>
+        </div>
+        <div class="stats-item">
+          <span class="stats-label">视频渲染最大间隔:</span>
+          <span id="videoFrameRenderIntervalMax" class="stats-text">0</span> ms
+          <span class="stats-tip">渲染两帧间最大时间</span>
+        </div>
+        <div class="stats-item">
+          <span class="stats-label">音频解码最大间隔:</span>
+          <span id="audioFrameDecodeIntervalMax" class="stats-text">0</span> ms
+          <span class="stats-tip">解码两帧间最大时间</span>
+        </div>
+        <div class="stats-item">
+          <span class="stats-label">音频渲染最大间隔:</span>
+          <span id="audioFrameRenderIntervalMax" class="stats-text">0</span> ms
+          <span class="stats-tip">渲染两帧间最大时间</span>
+        </div>
+        <div class="stats-item">
+          <span class="stats-label">视频编码帧率:</span>
+          <span id="videoEncodeFramerate" class="stats-text">0</span> fps
+          <span class="stats-tip">源视频的编码帧率</span>
+        </div>
+        <div class="stats-item">
+          <span class="stats-label">音频编码帧率:</span>
+          <span id="audioEncodeFramerate" class="stats-text">0</span> fps
+          <span class="stats-tip">源音频的编码帧率</span>
+        </div>
       </div>
     </div>
     <div id="ua"></div>
@@ -584,7 +701,7 @@
 
       let statsTimer;
 
-      let url = ''
+      let url = 'https://qnktv.ktvdaren.com/test/7116810.ts'
       let defaultVersion = '-atomic'
 
       function onFileOpen(target) {
@@ -791,8 +908,20 @@
 
           player.on('time', (pts) => {
             if (slider && !isSeeking) {
-              slider.currentTime = Number(pts)
+              // 确保 pts 是数字类型，单位为毫秒
+              const currentTime = typeof pts === 'bigint' ? Number(pts) : Number(pts)
+              slider.currentTime = Math.round(currentTime)
             }
+          })
+          player.on('seeking', () => {
+            console.log('seeking...')
+            isSeeking = true
+          })
+          player.on('seeked', () => {
+            console.log('seeked')
+            setTimeout(() => {
+              isSeeking = false
+            }, 100)
           })
           player.on('changing', (mediaType, newStreamId, oldStreamId) => {
             console.log('changing', mediaType, newStreamId, oldStreamId)
@@ -841,8 +970,15 @@
             },
             methods: {
               seek() {
+                if (!player || isSeeking) {
+                  return
+                }
+                console.log('seek to:', this.currentTime, 'ms')
                 isSeeking = true
-                player.seek(BigInt(this.currentTime)).then(() => {
+                // 确保传入 BigInt 类型，单位为毫秒
+                const seekTime = BigInt(Math.round(this.currentTime))
+                player.seek(seekTime).catch((error) => {
+                  console.error('seek error:', error)
                   isSeeking = false
                 })
               }
@@ -872,6 +1008,7 @@
             data: function() {
               return { 
                 options: [
+                  
                   {
                     value: 0.5
                   },
@@ -889,6 +1026,18 @@
                   },
                   {
                     value: 2.0
+                  },
+                  {
+                    value: 3.0
+                  },
+                  {
+                    value: 4.0
+                  },
+                  {
+                    value: 6.0
+                  },
+                  {
+                    value: 8.0
                   }
                 ],
                 value: 1.0
@@ -1290,6 +1439,157 @@
         }
       }
 
+      // 音视同步诊断函数
+      function diagnosticSync() {
+        if (!player) {
+          alert('请先加载视频！')
+          return
+        }
+        
+        const stats = player.getStats()
+        
+        // 处理 BigInt 类型
+        const audioCurrentTime = typeof stats.audioCurrentTime === 'bigint' ? Number(stats.audioCurrentTime) : stats.audioCurrentTime
+        const videoCurrentTime = typeof stats.videoCurrentTime === 'bigint' ? Number(stats.videoCurrentTime) : stats.videoCurrentTime
+        const avDiff = audioCurrentTime - videoCurrentTime
+        
+        console.log('\n=== 🔍 音视同步诊断报告 ===')
+        console.log('\n【原始数据】')
+        console.log(`音频当前时间（原始值）: ${audioCurrentTime}`)
+        console.log(`视频当前时间（原始值）: ${videoCurrentTime}`)
+        console.log(`同步差（原始值）: ${avDiff}`)
+        
+        // 检测时间戳单位
+        console.log('\n【时间戳单位检测】')
+        const playerCurrentTime = typeof player.getPosition === 'function' ? player.getPosition() : 0  // 播放器当前位置（微秒）
+        const playerTimeNum = typeof playerCurrentTime === 'bigint' ? Number(playerCurrentTime) : playerCurrentTime
+        console.log(`播放器当前时间: ${playerTimeNum} μs = ${(playerTimeNum/1000).toFixed(2)} ms = ${(playerTimeNum/1000000).toFixed(2)} s`)
+        
+        let timeUnit = 'ms'
+        let audioTimeMs = audioCurrentTime
+        let videoTimeMs = videoCurrentTime
+        let avDiffMs = avDiff
+        
+        // 如果时间戳值过大（>100万），可能是微秒单位
+        if (Math.abs(audioCurrentTime) > 1000000 || Math.abs(videoCurrentTime) > 1000000) {
+          console.log('⚠️ 检测到异常：时间戳数值过大，可能单位为微秒（μs）而非毫秒（ms）')
+          timeUnit = 'μs'
+          audioTimeMs = audioCurrentTime / 1000
+          videoTimeMs = videoCurrentTime / 1000
+          avDiffMs = avDiff / 1000
+          console.log('\n【单位转换后】')
+          console.log(`音频当前时间: ${audioTimeMs.toFixed(2)} ms`)
+          console.log(`视频当前时间: ${videoTimeMs.toFixed(2)} ms`)
+          console.log(`同步差: ${avDiffMs.toFixed(2)} ms`)
+        } else {
+          console.log('✅ 时间戳单位正常（毫秒 ms）')
+        }
+        
+        console.log('\n【播放器状态】')
+        const duration = typeof player.getDuration === 'function' ? player.getDuration() : 0
+        const durationNum = typeof duration === 'bigint' ? Number(duration) : duration
+        console.log(`播放位置: ${(playerTimeNum/1000000).toFixed(2)}秒`)
+        console.log(`视频时长: ${(durationNum/1000000).toFixed(2)}秒`)
+        console.log(`播放速度: ${player.getPlaybackRate()}x`)
+        
+        console.log('\n【编解码信息】')
+        console.log(`音频编码: ${stats.audiocodec || '未知'}`)
+        console.log(`视频编码: ${stats.videocodec || '未知'}`)
+        console.log(`音频解码器: ${stats.audioDecodeName || '未知'}`)
+        console.log(`视频解码器: ${stats.videoDecodeName || '未知'}`)
+        console.log(`音频解码帧率: ${stats.audioDecodeFramerate || 0} fps`)
+        console.log(`视频解码帧率: ${stats.videoDecodeFramerate || 0} fps`)
+        console.log(`音频渲染帧率: ${stats.audioRenderFramerate || 0} fps`)
+        console.log(`视频渲染帧率: ${stats.videoRenderFramerate || 0} fps`)
+        
+        console.log('\n【缓冲与卡顿】')
+        console.log(`音频卡顿次数: ${stats.audioStutter}`)
+        console.log(`视频卡顿次数: ${stats.videoStutter}`)
+        console.log(`音频缓冲队列: ${stats.audioPacketQueueLength} 包`)
+        console.log(`视频缓冲队列: ${stats.videoPacketQueueLength} 包`)
+        
+        // 音频异常检测
+        if (audioCurrentTime === 0 && videoCurrentTime > 1000) {
+          console.log('\n⚠️ 【检测到音频异常】')
+          console.log('视频正常播放但音频时间为 0，可能原因：')
+          
+          if (!stats.audioDecodeFramerate || stats.audioDecodeFramerate === 0) {
+            console.log('❌ 1. 音频解码器未工作（解码帧率 = 0）')
+            console.log('   - 可能是 TS 流中音频轨解析失败')
+            console.log('   - 或者音频编解码器不支持')
+          } else {
+            console.log(`✅ 音频解码器工作正常（${stats.audioDecodeFramerate} fps）`)
+          }
+          
+          if (!stats.audioRenderFramerate || stats.audioRenderFramerate === 0) {
+            console.log('❌ 2. 音频渲染器未工作（渲染帧率 = 0）')
+            console.log('   - 浏览器可能自动静音了音频上下文')
+            console.log('   - 请点击页面上的“恢复音频”按钮')
+          } else {
+            console.log(`✅ 音频渲染器工作正常（${stats.audioRenderFramerate} fps）`)
+          }
+          
+          if (stats.audioPacketQueueLength === 0) {
+            console.log('❌ 3. 音频缓冲队列为空')
+            console.log('   - 可能 TS 流中没有音频数据')
+            console.log('   - 或者音频流解析失败')
+          } else {
+            console.log(`✅ 音频缓冲队列: ${stats.audioPacketQueueLength} 包`)
+          }
+          
+          console.log('\n💡 建议操作：')
+          console.log('1. 点击页面上的“恢复音频”按钮')
+          console.log('2. 检查浏览器控制台是否有音频解码错误')
+          console.log('3. 确认 TS 流文件包含音频轨')
+        }
+        
+        let diagnosis = '\n【诊断结果】\n'
+        const absAvDiff = Math.abs(avDiffMs)
+        
+        // 对于 TS 流，音视频是复用在一起的，PTS 应该同步
+        console.log('\n【TS 流说明】')
+        console.log('TS 流中音视频是复用在一起的，它们的 PTS 应该基本一致')
+        console.log('如果音频时间为 0 但视频正常，说明音频流没有正常工作')
+        console.log('如果两者都有值但差距很大，可能是时间戳单位错误')
+        console.log()
+        
+        if (absAvDiff < 50) {
+          diagnosis += '✅ 同步状态：优秀 (< 50ms)'
+        } else if (absAvDiff < 200) {
+          diagnosis += '⚠️ 同步状态：警告 (50-200ms)'
+          diagnosis += '\n说明：有轻微延迟，但通常不影响观看体验'
+        } else if (absAvDiff < 1000) {
+          diagnosis += '❌ 同步状态：差 (200-1000ms)'
+          diagnosis += '\n建议：启用 Worker 多线程、SIMD 加速和 WebCodecs 硬解'
+        } else {
+          diagnosis += '🔥 同步状态：严重问题 (> 1000ms)'
+          diagnosis += '\n\n可能原因：'
+          diagnosis += '\n1. 时间戳单位错误（微秒当成毫秒）'
+          diagnosis += '\n2. Seek 操作后未正确同步'
+          diagnosis += '\n3. 统计数据采集异常'
+          diagnosis += '\n4. Worker 模式下数据同步问题'
+          
+          if (timeUnit === 'μs') {
+            diagnosis += '\n\n🔍 发现问题：统计数据的时间戳单位可能是微秒（μs）而非毫秒（ms）！'
+            diagnosis += `\n转换后的同步差应为：${avDiffMs.toFixed(2)} ms`
+          }
+        }
+        
+        console.log(diagnosis)
+        console.log('\n================================\n')
+        
+        if (timeUnit === 'μs') {
+          alert(`⚠️ 数据单位异常
+
+原始同步差: ${avDiff.toFixed(2)} μs
+实际同步差: ${avDiffMs.toFixed(2)} ms
+
+${diagnosis}`)
+        } else {
+          alert(`音视同步差: ${avDiffMs.toFixed(2)} ms\n\n${diagnosis}`)
+        }
+      }
+
       const statsKeys = [
         'audiocodec',
         'videocodec',
@@ -1331,11 +1631,52 @@
           }
 
           span.textContent = value
+          
+          // 添加颜色提示
+          span.className = 'stats-text'
+          if (key === 'audioStutter' || key === 'videoStutter') {
+            if (value === 0) {
+              span.className += ' good'
+            } else if (value < 5) {
+              span.className += ' warning'
+            } else {
+              span.className += ' danger'
+            }
+          }
         })
 
         document.querySelector('#jitterMin').textContent = stats.jitterBuffer.min
         document.querySelector('#jitterMax').textContent = stats.jitterBuffer.max
-        document.querySelector('#A_V').textContent = stats.audioCurrentTime - stats.videoCurrentTime
+        
+        // 音视同步差，并添加颜色
+        let audioTime = typeof stats.audioCurrentTime === 'bigint' ? Number(stats.audioCurrentTime) : stats.audioCurrentTime
+        let videoTime = typeof stats.videoCurrentTime === 'bigint' ? Number(stats.videoCurrentTime) : stats.videoCurrentTime
+        
+        // 检测是否为微秒单位（值过大）
+        if (Math.abs(audioTime) > 1000000 || Math.abs(videoTime) > 1000000) {
+          // 转换为毫秒
+          audioTime = audioTime / 1000
+          videoTime = videoTime / 1000
+        }
+        
+        const avDiff = Math.round(audioTime - videoTime)
+        const avSpan = document.querySelector('#A_V')
+        avSpan.textContent = avDiff
+        avSpan.className = 'stats-text'
+        
+        const absAvDiff = Math.abs(avDiff)
+        if (absAvDiff < 50) {
+          avSpan.className += ' good'  // < 50ms 优秀
+        } else if (absAvDiff < 200) {
+          avSpan.className += ' warning'  // < 200ms 警告
+        } else {
+          avSpan.className += ' danger'  // >= 200ms 危险
+        }
+        
+        // 如果同步差过大，输出警告
+        if (absAvDiff > 1000) {
+          console.warn(`⚠️ 音视同步差过大: ${avDiff}ms, 音频时间: ${Math.round(audioTime)}ms, 视频时间: ${Math.round(videoTime)}ms`)
+        }
       }
       
       urlComponent = new Vue({
@@ -1430,7 +1771,7 @@
         el: '#enableWorker',
         data: function () {
           return {
-            enableWorker: false
+            enableWorker: true
           }
         }
       })
@@ -1564,8 +1905,25 @@
 
       document.querySelector('#ua').textContent = navigator.userAgent
 
+      // 检测 SharedArrayBuffer 支持
+      function checkSharedArrayBufferSupport() {
+        if (typeof SharedArrayBuffer !== 'undefined') {
+          console.log('✅ SharedArrayBuffer 支持：Worker 多线程可用')
+          console.log('✅ crossOriginIsolated:', crossOriginIsolated)
+          return true
+        } else {
+          console.warn('❌ SharedArrayBuffer 不支持：Worker 多线程不可用')
+          console.warn('请确保服务器配置了正确的 COOP 和 COEP 响应头')
+          if (enableWorkerComponent) {
+            enableWorkerComponent.enableWorker = false
+          }
+          return false
+        }
+      }
+
       testSupportWasmAtomic()
       testSupportWasmSimd()
+      checkSharedArrayBufferSupport()
     </script>
 </body>
 </html>

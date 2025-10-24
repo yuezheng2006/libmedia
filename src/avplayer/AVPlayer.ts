@@ -3254,7 +3254,7 @@ export default class AVPlayer extends Emitter implements ControllerObserver {
   */
   public setPlaybackRate(rate: number) {
     if (!this.isLive_) {
-      this.playRate = restrain(rate, 0.5, 2)
+      this.playRate = restrain(rate, 0.25, 8)
       if (defined(ENABLE_MSE) && this.useMSE) {
         AVPlayer.MSEThread?.setPlayRate(this.taskId, this.playRate)
         if (this.video) {
