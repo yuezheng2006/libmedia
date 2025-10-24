@@ -110,6 +110,8 @@
     // 1. 检查导出函数
     function checkFunctions() {
       log('🔍 检查导出函数...', 'warning');
+      log('WASM文件路径: ./thunder_module.js', 'info');
+      log('WASM文件时间: 2025-10-24 19:28', 'info');
 
       const functions = [
         '_js_init_auth',
@@ -132,6 +134,12 @@
           log(`  ❌ ${fn}: 未导出`, 'error');
           missingCount++;
         }
+      });
+
+      // 额外检查：列出Module上的所有导出函数
+      log('📋 Module上所有以_js开头的函数:', 'info');
+      Object.keys(Module).filter(k => k.startsWith('_js')).forEach(k => {
+        log(`   ${k}: ${typeof Module[k]}`, 'info');
       });
 
       if (missingCount === 0) {
