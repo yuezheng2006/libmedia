@@ -5,6 +5,8 @@ report.json
 test/lib/
 ffmpeg-cache
 /docs/
+.temp/
+.qoder/
 
 dist/**/
 dist/*
