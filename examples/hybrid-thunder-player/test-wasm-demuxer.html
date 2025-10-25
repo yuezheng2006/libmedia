@@ -69,7 +69,8 @@
       <button onclick="checkFunctions()">1. 检查导出函数</button>
       <button onclick="setupCallback()">2. 设置Packet回调</button>
       <button onclick="initDecoder()">3. 初始化Decoder</button>
-      <button onclick="readPackets(5)">4. 读取5个Packets</button>
+      <button onclick="getStreamMetadata()">4. 获取Stream元数据</button>
+      <button onclick="readPackets(5)">5. 读取5个Packets</button>
       <button onclick="clearLog()">清空日志</button>
     </div>
 
@@ -111,7 +112,7 @@
     function checkFunctions() {
       log('🔍 检查导出函数...', 'warning');
       log('WASM文件路径: ./thunder_module.js', 'info');
-      log('WASM文件时间: 2025-10-24 19:28', 'info');
+      log('WASM文件时间: 2025-10-25 10:41 (新版本，含metadata导出)', 'info');
 
       const functions = [
         '_js_init_auth',
@@ -123,7 +124,15 @@
         '_js_setPacketCallback',
         '_js_readOnePacket',
         '_setPacketCallback',
-        '_readOnePacket'
+        '_readOnePacket',
+        '_js_getVideoStreamIndex',
+        '_js_getAudioStreamIndex',
+        '_js_getVideoCodecId',
+        '_js_getAudioCodecId',
+        '_js_getVideoWidth',
+        '_js_getVideoHeight',
+        '_js_getAudioSampleRate',
+        '_js_getAudioChannels'
       ];
 
       let missingCount = 0;
@@ -218,7 +227,46 @@
       }
     }
 
-    // 4. 读取Packets
+    // 4. 获取Stream元数据
+    function getStreamMetadata() {
+      log('📊 获取Stream元数据...', 'warning');
+
+      if (typeof Module._js_getVideoStreamIndex !== 'function') {
+        log('❌ metadata函数未导出', 'error');
+        return;
+      }
+
+      try {
+        const videoIdx = Module._js_getVideoStreamIndex();
+        const audioIdx = Module._js_getAudioStreamIndex();
+
+        log(`📹 Video Stream Index: ${videoIdx}`, videoIdx >= 0 ? 'success' : 'warning');
+        log(`🎵 Audio Stream Index: ${audioIdx}`, audioIdx >= 0 ? 'success' : 'warning');
+
+        if (videoIdx >= 0) {
+          const codecId = Module._js_getVideoCodecId();
+          const width = Module._js_getVideoWidth();
+          const height = Module._js_getVideoHeight();
+          log(`   Codec ID: ${codecId}`, 'info');
+          log(`   Resolution: ${width}x${height}`, 'info');
+        }
+
+        if (audioIdx >= 0) {
+          const audioCodecId = Module._js_getAudioCodecId();
+          const sampleRate = Module._js_getAudioSampleRate();
+          const channels = Module._js_getAudioChannels();
+          log(`   Audio Codec ID: ${audioCodecId}`, 'info');
+          log(`   Sample Rate: ${sampleRate} Hz`, 'info');
+          log(`   Channels: ${channels}`, 'info');
+        }
+
+        log('✅ 元数据获取完成', 'success');
+      } catch (e) {
+        log('❌ 获取失败: ' + e.message, 'error');
+      }
+    }
+
+    // 5. 读取Packets
     function readPackets(count) {
       log(`📖 开始读取 ${count} 个packets...`, 'warning');
 
