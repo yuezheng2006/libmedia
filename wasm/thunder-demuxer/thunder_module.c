@@ -119,10 +119,18 @@ int get_auth_status_wrapper() {
     return status;
 }
 
-// ✅ 新增：导出readOnePacket函数
-// 声明decoder.c中的readOnePacket函数
+// ✅ 新增：导出readOnePacket函数和stream metadata函数
+// 声明decoder.c中的函数
 extern int readOnePacket();
 extern void setPacketCallback(void *callback);
+extern int getVideoStreamIndex();
+extern int getAudioStreamIndex();
+extern int getVideoCodecId();
+extern int getAudioCodecId();
+extern int getVideoWidth();
+extern int getVideoHeight();
+extern int getAudioSampleRate();
+extern int getAudioChannels();
 
 EMSCRIPTEN_KEEPALIVE
 int js_readOnePacket() {
@@ -132,6 +140,46 @@ int js_readOnePacket() {
 EMSCRIPTEN_KEEPALIVE
 void js_setPacketCallback(void *callback) {
     setPacketCallback(callback);
+}
+
+EMSCRIPTEN_KEEPALIVE
+int js_getVideoStreamIndex() {
+    return getVideoStreamIndex();
+}
+
+EMSCRIPTEN_KEEPALIVE
+int js_getAudioStreamIndex() {
+    return getAudioStreamIndex();
+}
+
+EMSCRIPTEN_KEEPALIVE
+int js_getVideoCodecId() {
+    return getVideoCodecId();
+}
+
+EMSCRIPTEN_KEEPALIVE
+int js_getAudioCodecId() {
+    return getAudioCodecId();
+}
+
+EMSCRIPTEN_KEEPALIVE
+int js_getVideoWidth() {
+    return getVideoWidth();
+}
+
+EMSCRIPTEN_KEEPALIVE
+int js_getVideoHeight() {
+    return getVideoHeight();
+}
+
+EMSCRIPTEN_KEEPALIVE
+int js_getAudioSampleRate() {
+    return getAudioSampleRate();
+}
+
+EMSCRIPTEN_KEEPALIVE
+int js_getAudioChannels() {
+    return getAudioChannels();
 }
 
 // 模块初始化函数

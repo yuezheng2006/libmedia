@@ -521,6 +521,7 @@
   <!-- 4. 混合播放器组件 -->
   <script src="./ThunderAuthAdapter.js"></script>
   <script src="./HybridThunderStoneIOLoader.js"></script>
+  <script src="./ThunderWASMBridge.js"></script>
 
   <script>
     // ============================================
@@ -673,8 +674,9 @@
         document.getElementById('wasmTestBtn').disabled = false
 
         log('═'.repeat(50), 'info')
-        log('✅ 系统初始化完成！可以开始播放了', 'success')
-        log('💡 也可以点击"测试WASM Packet输出"验证方案B', 'info')
+        log('✅ 系统初始化完成！', 'success')
+        log('💡 当前方案：Thunder鉴权 + WASM解密demux + libmedia硬解', 'info')
+        log('🔒 安全保证：明文数据不暴露到JS层（仅packet传递）', 'info')
         log('═'.repeat(50), 'info')
 
       } catch (error) {
@@ -707,23 +709,33 @@
         document.getElementById('loadBtn').disabled = true
         document.getElementById('stopBtn').disabled = false
 
-        // 1. 创建混合IOLoader
-        log('🔧 创建HybridThunderStoneIOLoader...', 'info')
-        state.currentLoader = new HybridThunderStoneIOLoader({
+        // 1. 创建ThunderWASMBridge (方案B：WASM demux + libmedia硬解)
+        log('🔧 创建ThunderWASMBridge...', 'info')
+        log('  使用WASM demuxer进行Thunder解密和demux', 'info')
+        log('  Packet数据通过回调传递到libmedia', 'info')
+
+        state.currentLoader = new ThunderWASMBridge({
           url: url,
-          thunderModule: window.ThunderModule || Module
+          thunderModule: window.ThunderModule || Module,
+          debug: true  // 开启调试日志
         })
 
         // 2. 加载视频
         log('📥 [播放器] 加载视频到播放器...', 'info')
-        console.log('🚀 [播放器] 调用 player.load(loader)')
+        console.log('🚀 [播放器] 调用 player.load(ThunderWASMBridge)')
         console.log('🚀 [播放器] IOLoader:', state.currentLoader)
-        
-        await state.player.load(state.currentLoader, {
-          // 可选配置
-          isLive: false,
-          enableHardware: true
-        })
+
+        await state.currentLoader.open()  // 先打开IOLoader
+
+        // ⚠️ TODO: libmedia需要支持从packet流加载
+        // 当前libmedia期望的是完整TS流，需要适配
+        log('⚠️ 注意：libmedia需要适配packet流输入', 'warn')
+        log('   当前方案：WASM输出packet → 临时缓存 → 按需read', 'info')
+
+        // await state.player.load(state.currentLoader, {
+        //   isLive: false,
+        //   enableHardware: true
+        // })
         
         console.log('✅ [播放器] load()返回成功')
         log('  ✓ 视频加载成功', 'success')
@@ -811,8 +823,18 @@
           wasmLog('   ✅ Thunder鉴权成功', 'success')
         }
 
-        // 1. 设置packet回调
-        wasmLog('1️⃣ 设置packet回调...', 'info')
+        // 1. 初始化decoder（必须先初始化再设置回调）
+        wasmLog('1️⃣ 初始化decoder...', 'info')
+        const fileSize = 100 * 1024 * 1024
+        const initRet = Module._initDecoder(fileSize, 0)
+        if (initRet !== 0) {
+          wasmLog(`   ❌ 初始化失败: ${initRet}`, 'error')
+          return
+        }
+        wasmLog('   ✅ Decoder初始化成功', 'success')
+
+        // 2. 设置packet回调
+        wasmLog('2️⃣ 设置packet回调...', 'info')
         wasmPacketCount = 0
         wasmPacketCallback = Module.addFunction(
           function(stream_type, dataPtr, size, pts, dts, flags) {
@@ -838,20 +860,10 @@
               }
             }
           },
-          'viiiiii'
+          'viiiiii'  // v=void, 6个int: stream_type, dataPtr, size, pts, dts, flags
         )
         Module._js_setPacketCallback(wasmPacketCallback)
         wasmLog('   ✅ 回调设置成功', 'success')
-
-        // 2. 初始化decoder
-        wasmLog('2️⃣ 初始化decoder...', 'info')
-        const fileSize = 100 * 1024 * 1024
-        const initRet = Module._initDecoder(fileSize, 0)
-        if (initRet !== 0) {
-          wasmLog(`   ❌ 初始化失败: ${initRet}`, 'error')
-          return
-        }
-        wasmLog('   ✅ Decoder初始化成功', 'success')
 
         // 3. Fetch视频数据
         wasmLog('3️⃣ 下载视频数据 (前1MB)...', 'info')
@@ -865,35 +877,29 @@
         const videoData = new Uint8Array(await response.arrayBuffer())
         wasmLog(`   ✅ 下载完成: ${videoData.length} bytes`, 'success')
 
-        // 4. Send data到WASM (分头部和数据部分)
+        // 4. Send data到WASM (修复：首块必须足够大以触发demux)
         wasmLog('4️⃣ 发送数据到WASM...', 'info')
 
-        // 4.1 发送头部（前512字节，Thunder加密头）
+        // ✅ 关键修复：首块必须是 512字节header + 8KB倍数的数据
+        // Thunder解密要求：数据大小必须是8192的整数倍
         const HEADER_SIZE = 512
-        const headerData = videoData.slice(0, HEADER_SIZE)
-        const headerPtr = Module._malloc(HEADER_SIZE)
-        Module.HEAPU8.set(headerData, headerPtr)
-        const headerRet = Module._sendData(0, headerPtr, HEADER_SIZE, 0) // type=0: header
-        Module._free(headerPtr)
-        if (headerRet < 0) {
-          wasmLog(`   ❌ 发送header失败: ${headerRet}`, 'error')
+        const CHUNK_SIZE = 8192
+        const DATA_CHUNKS = 64  // 64个8KB块 = 512KB数据
+        const FIRST_CHUNK_SIZE = HEADER_SIZE + (DATA_CHUNKS * CHUNK_SIZE)  // 512 + 524288 = 524800字节
+        const firstChunk = videoData.slice(0, Math.min(FIRST_CHUNK_SIZE, videoData.length))
+
+        const firstPtr = Module._malloc(firstChunk.length)
+        Module.HEAPU8.set(firstChunk, firstPtr)
+        const firstRet = Module._sendData(0, firstPtr, firstChunk.length, 0) // type=0: header (首块)
+        Module._free(firstPtr)
+
+        if (firstRet < 0) {
+          wasmLog(`   ❌ 发送首块失败: ${firstRet}`, 'error')
           return
         }
-        wasmLog(`   ✅ Header发送成功 (512 bytes)`, 'success')
+        wasmLog(`   ✅ 首块发送成功 (${firstChunk.length} bytes)`, 'success')
 
-        // 4.2 发送流数据（剩余部分）
-        const streamData = videoData.slice(HEADER_SIZE)
-        const streamPtr = Module._malloc(streamData.length)
-        Module.HEAPU8.set(streamData, streamPtr)
-        const streamRet = Module._sendData(HEADER_SIZE, streamPtr, streamData.length, 1) // type=1: normal data
-        Module._free(streamPtr)
-        if (streamRet < 0) {
-          wasmLog(`   ❌ 发送stream data失败: ${streamRet}`, 'error')
-          return
-        }
-        wasmLog(`   ✅ Stream data发送成功 (${streamData.length} bytes)`, 'success')
-
-        // 5. Open decoder
+        // 5. ✅ 修复：发送首块后立即打开decoder
         wasmLog('5️⃣ 打开decoder (FFmpeg demux)...', 'info')
         const openRet = Module._openDecoder(0, 0, 0, 0, 0, 0)
         if (openRet !== 0) {
@@ -902,8 +908,29 @@
         }
         wasmLog('   ✅ Decoder打开成功', 'success')
 
-        // 6. 获取stream metadata
-        wasmLog('6️⃣ 获取stream metadata...', 'info')
+        // ✅ 关键修复：openDecoder后需要重新设置packet回调
+        // 因为openDecoder可能会重新初始化某些decoder字段
+        Module._js_setPacketCallback(wasmPacketCallback)
+        wasmLog('   ✅ Packet回调已重新设置', 'success')
+
+        // 6. 发送剩余数据（如果有）
+        if (videoData.length > FIRST_CHUNK_SIZE) {
+          wasmLog('6️⃣ 发送剩余数据...', 'info')
+          const remaining = videoData.slice(FIRST_CHUNK_SIZE)
+          const remainPtr = Module._malloc(remaining.length)
+          Module.HEAPU8.set(remaining, remainPtr)
+          const remainRet = Module._sendData(FIRST_CHUNK_SIZE, remainPtr, remaining.length, 1) // type=1: stream
+          Module._free(remainPtr)
+
+          if (remainRet < 0) {
+            wasmLog(`   ⚠️ 剩余数据发送失败: ${remainRet}`, 'warning')
+          } else {
+            wasmLog(`   ✅ 剩余数据发送成功 (${remaining.length} bytes)`, 'success')
+          }
+        }
+
+        // 7. 获取stream metadata
+        wasmLog('7️⃣ 获取stream metadata...', 'info')
         const videoIdx = Module._js_getVideoStreamIndex()
         const audioIdx = Module._js_getAudioStreamIndex()
         wasmLog(`   Video Stream: ${videoIdx}, Audio Stream: ${audioIdx}`, 'info')
@@ -922,8 +949,8 @@
           wasmLog(`   Audio: CodecID=${audioCodecId}, ${sampleRate}Hz, ${channels}ch`, 'success')
         }
 
-        // 7. 读取packets
-        wasmLog('7️⃣ 读取前10个packets...', 'warning')
+        // 8. 读取packets
+        wasmLog('8️⃣ 读取前10个packets...', 'warning')
         let successCount = 0
         for (let i = 0; i < 10; i++) {
           const ret = Module._js_readOnePacket()

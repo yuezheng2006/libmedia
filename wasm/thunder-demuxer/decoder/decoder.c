@@ -33,7 +33,9 @@ typedef void(*VideoCallback)(unsigned char *buff, int size, int key_frame, doubl
 typedef void(*AudioCallback)(unsigned char *buff, int size, double timestamp);
 typedef void(*DownloaderCtrlCallback)(int ctrl);
 // ✅ 新增：Packet回调类型（用于输出H264/AAC packet给libmedia）
-typedef void(*PacketCallback)(int stream_type, unsigned char *data, int size, int64_t pts, int64_t dts, int flags);
+// 注意：pts和dts使用int而非int64_t,因为Emscripten的函数指针不支持int64参数
+// 对于大多数视频,PTS/DTS值在int32范围内足够使用
+typedef void(*PacketCallback)(int stream_type, unsigned char *data, int size, int pts, int dts, int flags);
 
 #ifdef __cplusplus
 extern "C" {
@@ -1817,12 +1819,15 @@ int sendData(int offset, unsigned char *buff, int size, int type) {
             }
 
             if(ts_header_check(buff, size) == 0){
-                memcpy(decoder->headBuffer, buff + ENCRYPT_HEAD_SIZE, size - ENCRYPT_HEAD_SIZE);
-                decoder->headBufferSize = size - ENCRYPT_HEAD_SIZE;
+                // ✅ 修复：复制完整数据（包括512字节加密头）
+                memcpy(decoder->headBuffer, buff, size);
+                decoder->headBufferSize = size;
                 decoder->headOffset = offset;
-                LOG_DEBUG("Head data saved, size: %d, offset: %d, buffer: %p", 
+                LOG_DEBUG("Head data saved (encrypted), size: %d, offset: %d, buffer: %p",
                         size, offset, decoder->headBuffer);
                 ret = decoder->headBufferSize;
+
+                // ✅ 解密：从512字节之后开始解密（跳过加密头）
                 tsDataDecryptSeek(decoder->tsDecrypt, 0);
                 if(tsDataDecrypt(decoder->tsDecrypt, decoder->headBuffer + ENCRYPT_HEAD_SIZE, size - ENCRYPT_HEAD_SIZE)){
                     LOG_DEBUG("Decrypt head data err.");
@@ -2043,6 +2048,64 @@ void setPacketCallback(void *callback) {
     }
     decoder->packetCallback = (PacketCallback)callback;
     LOG_INFO("setPacketCallback: callback set to %p", callback);
+}
+
+// ✅ 新增：获取stream信息的导出函数
+int getVideoStreamIndex() {
+    if (decoder == NULL || decoder->avformatContext == NULL) {
+        return -1;
+    }
+    return decoder->videoStreamIdx;
+}
+
+int getAudioStreamIndex() {
+    if (decoder == NULL || decoder->avformatContext == NULL) {
+        return -1;
+    }
+    return decoder->audioStreamIdx;
+}
+
+int getVideoCodecId() {
+    if (decoder == NULL || decoder->avformatContext == NULL || decoder->videoStreamIdx < 0) {
+        return -1;
+    }
+    return decoder->avformatContext->streams[decoder->videoStreamIdx]->codecpar->codec_id;
+}
+
+int getAudioCodecId() {
+    if (decoder == NULL || decoder->avformatContext == NULL || decoder->audioStreamIdx < 0) {
+        return -1;
+    }
+    return decoder->avformatContext->streams[decoder->audioStreamIdx]->codecpar->codec_id;
+}
+
+int getVideoWidth() {
+    if (decoder == NULL || decoder->avformatContext == NULL || decoder->videoStreamIdx < 0) {
+        return 0;
+    }
+    return decoder->avformatContext->streams[decoder->videoStreamIdx]->codecpar->width;
+}
+
+int getVideoHeight() {
+    if (decoder == NULL || decoder->avformatContext == NULL || decoder->videoStreamIdx < 0) {
+        return 0;
+    }
+    return decoder->avformatContext->streams[decoder->videoStreamIdx]->codecpar->height;
+}
+
+int getAudioSampleRate() {
+    if (decoder == NULL || decoder->avformatContext == NULL || decoder->audioStreamIdx < 0) {
+        return 0;
+    }
+    return decoder->avformatContext->streams[decoder->audioStreamIdx]->codecpar->sample_rate;
+}
+
+int getAudioChannels() {
+    if (decoder == NULL || decoder->avformatContext == NULL || decoder->audioStreamIdx < 0) {
+        return 0;
+    }
+    // 兼容旧版本FFmpeg，使用channels而不是ch_layout
+    return decoder->avformatContext->streams[decoder->audioStreamIdx]->codecpar->channels;
 }
 
 #ifdef __cplusplus
