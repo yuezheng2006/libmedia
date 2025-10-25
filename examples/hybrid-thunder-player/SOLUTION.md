@@ -155,59 +155,208 @@ sendData(512KB, remainingPtr, ..., 1)  // type=1: 后续数据
 
 ---
 
-## 🧪 测试步骤
+## 🧪 测试结果
 
-### 1. 测试WASM Packet输出（验证方案B可行性）
+### ✅ 已完成：WASM Packet输出验证 (2025-10-25)
 
 ```bash
 # 启动本地服务器
-npx http-server . -p 8080 --cors
+npx http-server . -p 8000 --cors
 
 # 浏览器访问
-open http://localhost:8080/examples/hybrid-thunder-player/
+open http://localhost:8000/examples/hybrid-thunder-player/
 ```
 
-**操作**:
+**测试步骤**:
 1. 点击"初始化系统"（Thunder鉴权）
 2. 点击"测试WASM Packet输出"
-3. 查看日志：
-   ```
-   ✅ 首块发送成功 (524288 bytes)
-   ✅ Decoder打开成功
-   📦 Packet #1: VIDEO 1234B, pts=0, keyframe=true
-   📦 Packet #2: AUDIO 567B, pts=0, keyframe=false
-   ...
-   ```
 
-**预期结果**:
-- `openDecoder`成功（不再返回8）
-- 成功读取packets并输出到回调
-- H264 NAL分析显示正确的SPS/PPS/IDR
+**实际输出日志**:
+```
+[14:35:00] ✅ 下载完成: 1048576 bytes
+[14:35:00] ✅ 首块发送成功 (524800 bytes)  // 512 + 64×8KB
+[14:35:00] ✅ Decoder打开成功
+[14:35:00] ✅ Packet回调已重新设置
+[14:35:00] Video Stream: 0, Audio Stream: 1
+[14:35:00] Video: CodecID=28, 1920x1080  // H.264
+[14:35:00] Audio: CodecID=86016, 48000Hz, 2ch  // MP2
 
-### 2. 测试完整播放（TODO）
+[14:35:00] 📦 Packet #1: AUDIO 974B, pts=182938, keyframe=true
+[14:35:00]    数据: ff fd d4 00... (MP2帧头特征)
 
-当前状态：WASM packet输出已验证 ✅
-待完成：libmedia适配packet流输入
+[14:35:00] 📦 Packet #4: VIDEO 5182B, pts=192000, keyframe=false
+[14:35:00]    数据: 00 00 00 01 09 f0... (H.264 NAL起始码)
+[14:35:00]    H264 NAL: 9 (AU delimiter)
 
-**需要libmedia改造**:
-- 当前libmedia期望CustomIOLoader返回完整TS流
-- 需要支持packet流输入（EncodedVideoChunk/EncodedAudioChunk）
+[14:35:00] ✅ 测试完成！成功读取 10 个packets
+```
 
-**临时方案**:
-- 先验证WASM packet输出正确性
-- 可以手动调用WebCodecs验证packet可解码性：
+**验证结果**:
+- ✅ Thunder鉴权成功
+- ✅ ThunderStone解密成功 (WASM内部)
+- ✅ FFmpeg demux成功 (从TS流提取H.264/MP2)
+- ✅ Packet回调正确触发
+- ✅ H264 NAL单元正确识别 (起始码 00 00 00 01)
+- ✅ MP2帧头正确识别 (ff fd d4 00)
+- ✅ PTS时间戳连续递增 (182938 → 195898)
+
+**数据格式分析**:
+- **H.264 Video packets**: 包含完整NAL单元,以00 00 00 01起始码开始
+- **MP2 Audio packets**: 包含完整MP2帧,以ff fd d4 00帧头开始
+- 这些是**裸packet数据**,不是MPEG-TS封装格式
+
+---
+
+## 🎯 当前问题分析
+
+### ThunderWASMBridge的read()方法返回什么?
+
+查看ThunderWASMBridge.js:251-279行:
+```javascript
+async read(buffer) {
+  // 等待packet可用
+  while (this.packetBuffer.length === 0 && !this.isStreamEnded) {
+    await new Promise(resolve => setTimeout(resolve, 10))
+    if (this.decoderOpened) {
+      this.readPackets()  // 调用_js_readOnePacket()
+    }
+  }
+
+  // 取出一个packet
+  const packet = this.packetBuffer.shift()
+  const copySize = Math.min(packet.data.length, buffer.length)
+  buffer.set(packet.data.subarray(0, copySize), 0)  // ← 返回packet裸数据!
+
+  return copySize
+}
+```
+
+**返回的数据格式**:
+- H.264裸packet (NAL单元):  `00 00 00 01 09 f0...`
+- MP2裸packet (音频帧):  `ff fd d4 00...`
+
+### libmedia期望什么格式?
+
+**libmedia的demuxer期望MPEG-TS流**:
+- TS packet: 188字节固定长度
+- TS packet header: `47 xx xx xx...` (0x47同步字节)
+- TS payload包含PES,PES包含ES (H.264/MP2)
+
+**问题**:
+- ThunderWASMBridge.read()返回**裸packet**
+- libmedia期望**TS流**
+- **格式不匹配!**
+
+---
+
+## 💡 解决方案
+
+### 方案1: libmedia跳过demux,直接使用packet (推荐)
+
+**思路**: 既然WASM已经demux完成,libmedia应该直接使用packet数据
+
+**需要修改**:
+- libmedia的AVPlayer需要支持"packet模式"
+- CustomIOLoader可以标识数据类型:
   ```javascript
-  const decoder = new VideoDecoder({
-    output: (frame) => { /* 渲染 */ },
-    error: (e) => { console.error(e) }
-  })
-  decoder.configure({ codec: 'avc1.64001f', ... })
-  decoder.decode(new EncodedVideoChunk({
-    type: packet.isKeyframe ? 'key' : 'delta',
-    timestamp: packet.pts,
-    data: packet.data
-  }))
+  get dataType() {
+    return 'packet'  // 或 'stream'
+  }
   ```
+- AVPlayer检测到packet模式后,跳过demuxer,直接送入WebCodecs
+
+**优点**:
+- ✅ 不重复demux,性能最优
+- ✅ 架构清晰,职责明确
+- ✅ 符合方案B的设计初衷
+
+**缺点**:
+- ⚠️ 需要修改libmedia (但你说不想改)
+
+### 方案2: ThunderWASMBridge重新封装packet为TS流
+
+**思路**: 在ThunderWASMBridge.read()中将packet重新封装成TS格式
+
+```javascript
+async read(buffer) {
+  const packet = this.packetBuffer.shift()
+
+  // ⚠️ 将packet.data重新封装为TS packet
+  const tsPackets = this.wrapAsTS(packet)
+  buffer.set(tsPackets, 0)
+
+  return tsPackets.length
+}
+
+wrapAsTS(packet) {
+  // 1. 创建PES packet (包含pts/dts)
+  // 2. 分割为TS packets (每个188字节)
+  // 3. 添加TS header (0x47, PID, continuity counter...)
+  return tsPacketsArray
+}
+```
+
+**优点**:
+- ✅ 不修改libmedia
+- ✅ 复用libmedia现有demuxer逻辑
+
+**缺点**:
+- ❌ **重复工作**: WASM已demux,现在又重新mux回去,libmedia再demux一次
+- ❌ **性能浪费**: 多了一次封装+解封装
+- ❌ **代码复杂**: TS封装逻辑复杂(PES/TS packet header/PAT/PMT...)
+
+### 方案3: 直接在JavaScript中使用WebCodecs硬解 (临时验证)
+
+**思路**: 暂时不走libmedia,直接用WebCodecs验证packet可用性
+
+```javascript
+// 创建VideoDecoder
+const videoDecoder = new VideoDecoder({
+  output: (frame) => {
+    // 渲染到canvas
+    ctx.drawImage(frame, 0, 0)
+    frame.close()
+  },
+  error: (e) => console.error(e)
+})
+
+videoDecoder.configure({
+  codec: 'avc1.640028',  // H.264 High Profile Level 4.0
+  codedWidth: 1920,
+  codedHeight: 1080
+})
+
+// 喂packet
+const chunk = new EncodedVideoChunk({
+  type: packet.isKeyframe ? 'key' : 'delta',
+  timestamp: packet.pts,
+  data: packet.data
+})
+videoDecoder.decode(chunk)
+```
+
+**优点**:
+- ✅ 快速验证packet数据正确性
+- ✅ 不依赖libmedia
+
+**缺点**:
+- ❌ 仅用于测试,不是最终方案
+
+---
+
+## 🎯 我的建议
+
+基于你说的"不想改libmedia",目前有两个选择:
+
+1. **方案2**: 在ThunderWASMBridge中实现TS重新封装
+   - 缺点:重复demux/mux,性能浪费
+   - 优点:不改libmedia
+
+2. **方案3**: 先用WebCodecs验证packet正确性
+   - 证明WASM输出的packet是可用的
+   - 然后再决定如何集成
+
+**你倾向哪个方案?** 或者你有其他想法?
 
 ---
 
