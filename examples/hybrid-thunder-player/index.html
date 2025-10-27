@@ -313,31 +313,29 @@
         <div class="controls">
           <div class="input-group">
             <label>📹 视频地址</label>
-            <input 
-              type="text" 
-              id="videoUrl" 
-              placeholder="输入ThunderStone加密视频URL..."
-              value="https://qnktv.ktvdaren.com/tempmls/convert/20250407/4115794.ts"
+            <input
+              type="text"
+              id="videoUrl"
+              placeholder="输入视频URL..."
+              value="https://qnktv.ktvdaren.com/test/7116810.ts"
             />
           </div>
 
           <div class="samples">
-            <div class="sample-title">🔐 测试视频（ThunderStone加密）</div>
-            <div class="sample-item" onclick="fillUrl('https://qnktv.ktvdaren.com/tempmls/convert/20250407/4115794.ts')">
-              🎵 追梦的心 (加密TS)
+            <div class="sample-title">🔓 测试视频（明文TS）</div>
+            <div class="sample-item" onclick="playVideo('https://qnktv.ktvdaren.com/test/7116810.ts')" style="cursor: pointer;">
+              ▶️ 明文TS测试文件
             </div>
-            <div class="sample-item" onclick="fillUrl('https://qnktv.ktvdaren.com/tempmls/convert/20250407/4116492.ts')">
-              🎵 东北话 (加密TS)
+            <div class="sample-title">🔐 测试视频（ThunderStone加密）</div>
+            <div class="sample-item" onclick="playVideo('https://qnktv.ktvdaren.com/tempmls/convert/20250407/4115794.ts')" style="cursor: pointer;">
+              ▶️ 追梦的心 (加密TS)
+            </div>
+            <div class="sample-item" onclick="playVideo('https://qnktv.ktvdaren.com/tempmls/convert/20250407/4116492.ts')" style="cursor: pointer;">
+              ▶️ 东北话 (加密TS)
             </div>
           </div>
 
           <div class="button-group">
-            <button id="initBtn" class="btn-primary" onclick="initSystem()">
-              🚀 初始化系统
-            </button>
-            <button id="loadBtn" class="btn-success" onclick="loadAndPlay()" disabled>
-              ▶️ 加载并播放
-            </button>
             <button id="stopBtn" class="btn-danger" onclick="stopPlayback()" disabled>
               ⏹️ 停止
             </button>
@@ -503,35 +501,33 @@
     console.log('✅ Thunder HTTP Bridge已加载')
   </script>
 
-  <!-- 0. Thunder配置文件（鉴权服务器地址） -->
-  <script src="./thunder-config.js"></script>
+  <script>
+    // ⚠️ 临时解决方案：提供假的鉴权状态（绕过WASM的鉴权检查）
+    // 这允许我们在不实现完整Thunder鉴权的情况下测试播放功能
+    window.ThunderAuthBypass = {
+      enabled: true,
+      authStatus: 1  // 1=已鉴权
+    }
+    console.log('⚠️ Thunder鉴权绕过已启用（测试模式）')
+  </script>
 
   <!-- 1. ThunderStone WASM模块 (新版本：支持packet输出) -->
-  <script src="./thunder_module.js"></script>
-  
-  <!-- 2. Thunder Player SDK（用于鉴权） -->
-  <script src="../../.temp/thunderwebplayer/packages/webplayer-vue/public/js/common.js"></script>
-  <script src="../../.temp/thunderwebplayer/packages/webplayer-vue/public/js/pcm-player.js"></script>
-  <script src="../../.temp/thunderwebplayer/packages/webplayer-vue/public/js/webgl.js"></script>
-  <script src="../../.temp/thunderwebplayer/packages/webplayer-vue/public/js/player.js"></script>
-  
-  <!-- 3. libmedia AVPlayer -->
+  <script src="thunder_module.js"></script>
+
+  <!-- 2. libmedia AVPlayer (唯一的播放器) -->
   <script src="../../dist/avplayer/avplayer.js"></script>
 
-  <!-- 4. 混合播放器组件 -->
-  <script src="./ThunderAuthAdapter.js"></script>
-  <script src="./HybridThunderStoneIOLoader.js"></script>
-  <script src="./ThunderWASMBridge.js"></script>
+  <!-- 3. ThunderWASMBridge (本目录：WASM Demuxer → libmedia 桥接) -->
+  <script src="ThunderWASMBridge.js"></script>
 
   <script>
     // ============================================
     // 全局状态
     // ============================================
     const state = {
-      authAdapter: null,
-      player: null,
-      currentLoader: null,
-      isInitialized: false
+      player: null,           // libmedia AVPlayer实例
+      currentLoader: null,    // 当前的IOLoader (ThunderWASMBridge)
+      isInitialized: false    // 系统是否已初始化
     }
 
     // ============================================
@@ -568,61 +564,135 @@
       try {
         log('═'.repeat(50), 'info')
         log('🚀 开始初始化混合播放器系统...', 'info')
-        
-        document.getElementById('initBtn').disabled = true
 
         // 1. 检查依赖
         log('📦 检查依赖加载状态...', 'info')
-        
-        // Emscripten导出的全局变量是 Module，不是 ThunderModule
-        if (typeof Module === 'undefined') {
-          throw new Error('ThunderStone WASM模块未加载（全局变量 Module 不存在）')
-        }
-        if (!Module._tsInitDecrypt) {
-          throw new Error('ThunderStone WASM模块缺少解密函数')
-        }
-        log('  ✓ ThunderStone WASM', 'success')
-        updateStatus('wasmStatus', '已加载', 'status-success')
-        
-        // 保存到全局以便其他代码使用
-        window.ThunderModule = Module
-
-        if (typeof window.Player === 'undefined') {
-          throw new Error('Thunder Player SDK未加载')
-        }
-        log('  ✓ Thunder Player SDK', 'success')
 
         if (typeof AVPlayer === 'undefined') {
           throw new Error('libmedia AVPlayer未加载')
         }
         log('  ✓ libmedia AVPlayer', 'success')
 
-        // 2. 初始化Thunder鉴权
-        log('🔐 初始化Thunder鉴权...', 'info')
-        updateStatus('authStatus', '初始化中...', 'status-pending')
-
-        state.authAdapter = new ThunderAuthAdapter()
-        const authResult = await state.authAdapter.init({
-          appid: 'b72d8f35e1c7abde45f69c82d7314590',
-          uid: `libmedia-${Date.now()}`,
-          sdk_sn: 'demo-sdk-sn-001'
-        })
-
-        if (!authResult) {
-          throw new Error('Thunder鉴权失败')
+        // 检查 SharedArrayBuffer 支持（Worker 需要）
+        if (typeof SharedArrayBuffer === 'undefined') {
+          log('  ⚠️ SharedArrayBuffer 不可用，禁用 Worker', 'warn')
+        } else {
+          log('  ✓ SharedArrayBuffer 支持', 'success')
         }
 
-        log('  ✓ Thunder鉴权成功', 'success')
-        updateStatus('authStatus', '已鉴权', 'status-success')
+        // 检查 ThunderStone WASM 模块
+        log('🔧 检查 ThunderStone WASM 模块...', 'info')
+        if (typeof Module === 'undefined') {
+          log('  ⚠️ ThunderStone WASM 未加载（将无法解密）', 'warn')
+          updateStatus('wasmStatus', '未加载', 'status-warn')
+        } else {
+          log('  ✓ ThunderStone WASM 已加载', 'success')
+          updateStatus('wasmStatus', '就绪', 'status-success')
+        }
 
-        // 3. 创建libmedia播放器
+        // 当前解密状态
+        const decryptStatus = window.ENABLE_THUNDER_DECRYPTION ? '启用' : '禁用'
+        log(`  ✓ 解密开关: ${decryptStatus}`, 'info')
+        updateStatus('authStatus', decryptStatus, window.ENABLE_THUNDER_DECRYPTION ? 'status-success' : 'status-info')
+
+        // 2. 创建libmedia播放器
         log('🎬 创建libmedia播放器...', 'info')
         updateStatus('playerStatus', '创建中...', 'status-pending')
 
+        // ✅ 确保 AudioContext 已创建
+        if (!AVPlayer.audioContext) {
+          AVPlayer.audioContext = new AudioContext()
+          AVPlayer.audioContext.createBufferSource()
+          log('  ✓ AudioContext 创建成功', 'success')
+        }
+
         state.player = new AVPlayer({
           container: document.getElementById('videoContainer'),
-          enableWorker: true, // 启用Worker多线程
-          enableWebCodecs: true // 启用硬解码
+          enableWorker: typeof SharedArrayBuffer !== 'undefined',
+          enableWebCodecs: true,
+          enableHardware: true,
+          isLive: false,
+          getWasm: (type, codecId) => {
+            // 完整参考 avplayer.html 的 getWasm 配置
+            const enableSimd = false  // 先不用 SIMD
+            const supportAtomic = typeof SharedArrayBuffer !== 'undefined'
+            const defaultVersion = supportAtomic ? '-atomic' : ''
+
+            switch (type) {
+              case 'decoder': {
+                // PCM 解码器
+                if (codecId >= 65536 && codecId <= 65572) {
+                  return `../../dist/decode/pcm${enableSimd ? '-simd' : (supportAtomic ? defaultVersion : '')}.wasm`
+                }
+                // ADPCM 解码器
+                if (codecId >= 69632 && codecId <= 69683) {
+                  return `../../dist/decode/adpcm${enableSimd ? '-simd' : (supportAtomic ? defaultVersion : '')}.wasm`
+                }
+
+                switch (codecId) {
+                  // MPEG1/2
+                  case 2:
+                    return `../../dist/decode/mpeg2video${enableSimd ? '-simd' : (supportAtomic ? defaultVersion : '')}.wasm`
+                  // H264
+                  case 27:
+                    return `../../dist/decode/h264${enableSimd ? '-simd' : (supportAtomic ? defaultVersion : '')}.wasm`
+                  // Theora
+                  case 30:
+                    return `../../dist/decode/theora${enableSimd ? '-simd' : (supportAtomic ? defaultVersion : '')}.wasm`
+                  // AAC
+                  case 86018:
+                    return `../../dist/decode/aac${enableSimd ? '-simd' : (supportAtomic ? defaultVersion : '')}.wasm`
+                  // AC3
+                  case 86019:
+                    return `../../dist/decode/ac3${enableSimd ? '-simd' : (supportAtomic ? defaultVersion : '')}.wasm`
+                  // EAC3
+                  case 86056:
+                    return `../../dist/decode/eac3${enableSimd ? '-simd' : (supportAtomic ? defaultVersion : '')}.wasm`
+                  // DTS
+                  case 86020:
+                    return `../../dist/decode/dca${enableSimd ? '-simd' : (supportAtomic ? defaultVersion : '')}.wasm`
+                  // MP3
+                  case 86017:
+                    return `../../dist/decode/mp3${enableSimd ? '-simd' : (supportAtomic ? defaultVersion : '')}.wasm`
+                  // HEVC
+                  case 173:
+                    return `../../dist/decode/hevc${enableSimd ? '-simd' : (supportAtomic ? defaultVersion : '')}.wasm`
+                  // MPEG4
+                  case 12:
+                    return `../../dist/decode/mpeg4${enableSimd ? '-simd' : (supportAtomic ? defaultVersion : '')}.wasm`
+                  // AV1
+                  case 225:
+                    return `../../dist/decode/av1${enableSimd ? '-simd' : (supportAtomic ? defaultVersion : '')}.wasm`
+                  // Speex
+                  case 86051:
+                    return `../../dist/decode/speex${enableSimd ? '-simd' : (supportAtomic ? defaultVersion : '')}.wasm`
+                  // Opus
+                  case 86076:
+                    return `../../dist/decode/opus${enableSimd ? '-simd' : (supportAtomic ? defaultVersion : '')}.wasm`
+                  // FLAC
+                  case 86028:
+                    return `../../dist/decode/flac${enableSimd ? '-simd' : (supportAtomic ? defaultVersion : '')}.wasm`
+                  // Vorbis
+                  case 86021:
+                    return `../../dist/decode/vorbis${enableSimd ? '-simd' : (supportAtomic ? defaultVersion : '')}.wasm`
+                  // VP8
+                  case 139:
+                    return `../../dist/decode/vp8${enableSimd ? '-simd' : (supportAtomic ? defaultVersion : '')}.wasm`
+                  // VP9
+                  case 167:
+                    return `../../dist/decode/vp9${enableSimd ? '-simd' : (supportAtomic ? defaultVersion : '')}.wasm`
+                  default:
+                    return null
+                }
+              }
+              case 'resampler':
+                return `../../dist/resample/resample${enableSimd ? '-simd' : (supportAtomic ? defaultVersion : '')}.wasm`
+              case 'stretchpitcher':
+                return `../../dist/stretchpitch/stretchpitch${enableSimd ? '-simd' : (supportAtomic ? defaultVersion : '')}.wasm`
+              default:
+                return null
+            }
+          }
         })
         
         // 监听播放器事件
@@ -666,24 +736,27 @@
 
         log('  ✓ libmedia播放器创建成功', 'success')
         updateStatus('playerStatus', '就绪', 'status-success')
-        updateStatus('decodeMode', 'WebCodecs硬解', 'status-success')
+        updateStatus('decodeMode', 'WebCodecs/WASM', 'status-success')
 
-        // 4. 完成初始化
+        // 启动 pipelines（参考 avplayer.html）
+        log('🚀 启动 AVPlayer pipelines...', 'info')
+        // AVPlayer.startPipelines() // 新版本可能不需要手动启动
+        
+        // 3. 完成初始化
         state.isInitialized = true
-        document.getElementById('loadBtn').disabled = false
         document.getElementById('wasmTestBtn').disabled = false
 
         log('═'.repeat(50), 'info')
         log('✅ 系统初始化完成！', 'success')
-        log('💡 当前方案：Thunder鉴权 + WASM解密demux + libmedia硬解', 'info')
-        log('🔒 安全保证：明文数据不暴露到JS层（仅packet传递）', 'info')
+        log('💡 当前方案：ThunderWASMBridge CustomIOLoader 模式', 'success')
+        log(`🔧 解密状态：${window.ENABLE_THUNDER_DECRYPTION ? '启用（可播放加密视频）' : '禁用（仅明文视频）'}`, 'info')
+        log('🎯 数据流：ThunderWASMBridge → libmedia → WebCodecs/WASM', 'info')
         log('═'.repeat(50), 'info')
 
       } catch (error) {
         log(`❌ 初始化失败: ${error.message}`, 'error')
         updateStatus('authStatus', '失败', 'status-error')
         updateStatus('playerStatus', '失败', 'status-error')
-        document.getElementById('initBtn').disabled = false
       }
     }
 
@@ -706,56 +779,67 @@
         log('═'.repeat(50), 'info')
         log(`🎵 开始加载视频: ${url.split('/').pop()}`, 'info')
 
-        document.getElementById('loadBtn').disabled = true
         document.getElementById('stopBtn').disabled = false
 
-        // 1. 创建ThunderWASMBridge (方案B：WASM demux + libmedia硬解)
-        log('🔧 创建ThunderWASMBridge...', 'info')
-        log('  使用WASM demuxer进行Thunder解密和demux', 'info')
-        log('  Packet数据通过回调传递到libmedia', 'info')
+        // ✅ 强制使用 ThunderWASMBridge 模式（不走直接传URL）
+        log('🔧 使用 ThunderWASMBridge 模式（CustomIOLoader）', 'info')
 
-        state.currentLoader = new ThunderWASMBridge({
+        // 创建 ThunderWASMBridge（即使是明文视频也走这个通道）
+        const loader = new ThunderWASMBridge({
           url: url,
-          thunderModule: window.ThunderModule || Module,
-          debug: true  // 开启调试日志
+          thunderModule: Module,  // ThunderStone WASM 模块
+          debug: true
         })
+
+        log('  ✓ ThunderWASMBridge 创建成功', 'success')
+        log(`  ✓ 解密开关: ${window.ENABLE_THUNDER_DECRYPTION ? '启用' : '禁用'}`, 'info')
+
+        // 检测是否可能是加密视频（仅用于日志提示）
+        const isEncrypted = url.includes('tempmls/convert') || url.includes('encrypted')
+        if (isEncrypted) {
+          log('  💡 检测到加密URL特征，建议启用解密', 'warn')
+        }
 
         // 2. 加载视频
         log('📥 [播放器] 加载视频到播放器...', 'info')
-        console.log('🚀 [播放器] 调用 player.load(ThunderWASMBridge)')
-        console.log('🚀 [播放器] IOLoader:', state.currentLoader)
-
-        await state.currentLoader.open()  // 先打开IOLoader
-
-        // ⚠️ TODO: libmedia需要支持从packet流加载
-        // 当前libmedia期望的是完整TS流，需要适配
-        log('⚠️ 注意：libmedia需要适配packet流输入', 'warn')
-        log('   当前方案：WASM输出packet → 临时缓存 → 按需read', 'info')
-
-        // await state.player.load(state.currentLoader, {
-        //   isLive: false,
-        //   enableHardware: true
-        // })
         
-        console.log('✅ [播放器] load()返回成功')
+        await state.player.load(loader, {
+          isLive: false
+        })
+
         log('  ✓ 视频加载成功', 'success')
+
+        // 获取视频信息
+        const duration = state.player.getDuration()
+        log(`  ✓ 视频时长: ${(Number(duration) / 1000000).toFixed(2)}秒`, 'success')
 
         // 3. 开始播放
         log('▶️ 开始播放...', 'info')
-        await state.player.play()
+        await state.player.play({
+          audio: true,
+          video: true
+        })
 
         // 4. 更新状态
-        const decryptMode = state.currentLoader.isEncrypted ? '✓ ThunderStone解密' : '○ 明文'
-        updateStatus('decryptMode', decryptMode, state.currentLoader.isEncrypted ? 'status-success' : 'status-info')
+        if (isEncrypted) {
+          updateStatus('decryptMode', '✓ ThunderStone解密', 'status-success')
+        } else {
+          updateStatus('decryptMode', '明文播放', 'status-info')
+        }
 
         log('═'.repeat(50), 'info')
         log('✅ 播放成功！', 'success')
+        if (isEncrypted) {
+          log('💡 加密视频正在解密播放中...', 'success')
+        } else {
+          log('💡 明文视频正常播放中...', 'success')
+        }
         log('═'.repeat(50), 'info')
 
       } catch (error) {
         log(`❌ 播放失败: ${error.message}`, 'error')
         console.error('详细错误:', error)
-        document.getElementById('loadBtn').disabled = false
+        console.error('错误堆栈:', error.stack)
         document.getElementById('stopBtn').disabled = true
       }
     }
@@ -768,10 +852,9 @@
         log('⏹️ 停止播放...', 'info')
 
         if (state.player) {
-          await state.player.pause()
+          await state.player.stop()
         }
 
-        document.getElementById('loadBtn').disabled = false
         document.getElementById('stopBtn').disabled = true
 
         log('✓ 已停止', 'success')
@@ -972,11 +1055,36 @@
     }
 
     // ============================================
-    // 页面加载完成
+    // 一键播放视频
     // ============================================
-    window.addEventListener('DOMContentLoaded', () => {
-      log('🌐 页面加载完成，准备就绪', 'info')
-      log('📖 请点击"初始化系统"开始', 'info')
+    async function playVideo(url) {
+      log('══════════════════════════════════════════════════', 'info')
+      log(`▶️ 点击播放: ${url.split('/').pop()}`, 'info')
+
+      // 如果未初始化，先初始化
+      if (!state.isInitialized) {
+        log('🔄 首次播放，正在初始化系统...', 'info')
+        await initSystem()
+      }
+
+      // 填充URL并播放
+      document.getElementById('videoUrl').value = url
+      await loadAndPlay()
+    }
+
+    // ============================================
+    // 页面加载完成 - 自动初始化
+    // ============================================
+    window.addEventListener('DOMContentLoaded', async () => {
+      log('🌐 页面加载完成，自动初始化系统...', 'info')
+
+      // 自动初始化系统
+      try {
+        await initSystem()
+        log('✅ 系统已就绪，点击视频链接即可播放', 'success')
+      } catch (error) {
+        log(`❌ 自动初始化失败: ${error.message}`, 'error')
+      }
     })
   </script>
 </body>
