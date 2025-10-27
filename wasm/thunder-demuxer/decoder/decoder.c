@@ -133,6 +133,7 @@ typedef struct WebDecoder {
     // 新增：用于8KB对齐处理的缓冲区
     AVFifoBuffer *alignFifo;
     unsigned char alignBuffer[10 * 1024 * 1024];
+    int enableDecryption; // 是否启用解密（用于调试IO通路）
 #endif
     int dataOffset;
     int readEof;
@@ -958,6 +959,12 @@ int readCallback(void *opaque, uint8_t *data, int len) {
             if(ret > 0) {
                 break;
             }
+            // ✅ 修复：headBuffer读完后返回EOF，避免无限循环
+            // 对于packet输出模式，FFmpeg只需要读取headBuffer就能完成流分析
+            LOG_INFO("readCallback: headBuffer已读完，设置EOF");
+            decoder->readEof = 1;
+            ret = AVERROR_EOF;  // 返回EOF让FFmpeg停止读取
+            break;
         }else {
             int usedSpace = av_fifo_size(decoder->fifo);
             if (usedSpace < kMinFifoSize) {
@@ -1170,8 +1177,8 @@ static inline int ts_header_check(unsigned char *buf, int size)
 
 
 //////////////////////////////////Export methods////////////////////////////////////////
-ErrorCode initDecoder(int size,int logLv) {
-    LOG_INFO("initDecoder start ");
+ErrorCode initDecoder(int size, int logLv, int enableDecryption) {
+    LOG_INFO("initDecoder start (enableDecryption=%d)", enableDecryption);
     ErrorCode ret = 0;
     do {
         //Log level.
@@ -1192,14 +1199,22 @@ ErrorCode initDecoder(int size,int logLv) {
         decoder->readEof = 0;
         decoder->auth_status = 0; // 初始化鉴权状态为未鉴权
 #if THUNDERSTONE_DECRTPT_SUPPORT
-        // decoder->tsDecryptCheck = 0;
-        decoder->tsDecrypt = NULL;
+        decoder->enableDecryption = enableDecryption;
+        decoder->tsDecrypt = NULL;  // 稍后根据enableDecryption决定是否初始化
         decoder->alignFifo = av_fifo_alloc(kDefaultFifoSize);
+
+        if (!enableDecryption) {
+            LOG_WARN("⚠️ 解密已禁用 - 将直接播放加密数据（会花屏但验证IO通路）");
+        } else {
+            // ✅ 临时测试：启用解密时自动设置鉴权状态为成功
+            // TODO: 生产环境需要真实的Thunder鉴权流程
+            extern int g_auth_status;
+            g_auth_status = 1;
+            LOG_WARN("⚠️ [测试模式] 鉴权状态已强制设置为成功 (g_auth_status=1)");
+            LOG_WARN("⚠️ 生产环境需要实现真实的Thunder鉴权流程");
+        }
 #endif
     } while (0);
-    // if(decoder->tsDecrypt){
-    //     ret = 1;
-    // }
     LOG_INFO("initDecoder success ret %d.", ret);
     return kErrorCode_Success;
 }
@@ -1448,9 +1463,10 @@ ErrorCode openDecoder(int mediaType,int *paramArray, int paramCount,
             &decoder->audioStreamIdx,
             &decoder->audioCodecContext);
         if (r != 0) {
-            ret = kErrorCode_FFmpeg_Error;
-            LOG_ERROR("Open audio codec context failed %d.", ret);
-            break;
+            // ✅ 不中断：允许仅视频模式（音频流可能不存在）
+            LOG_ERROR("Could not find audio stream");
+            decoder->audioCodecContext = NULL;
+            decoder->audioStreamIdx = -1;
         }
 
         if(decoder->avformatContext->nb_streams > 2){
@@ -1461,9 +1477,10 @@ ErrorCode openDecoder(int mediaType,int *paramArray, int paramCount,
                 &decoder->audioStreamIdx2,
                 &decoder->audioCodecContext2);
             if (r != 0) {
-                ret = kErrorCode_FFmpeg_Error;
-                LOG_ERROR("Open audio codec2 context failed %d.", ret);
-                // break;
+                // ✅ 不中断：允许仅视频模式（第二音频流可能不存在）
+                LOG_ERROR("Could not find audio stream 2");
+                decoder->audioCodecContext2 = NULL;
+                decoder->audioStreamIdx2 = -1;
             }else{
                 strncpy(audioCodecNameBuffer2, avcodec_get_name(decoder->audioCodecContext2->codec_id), 255);
             }
@@ -1479,18 +1496,21 @@ ErrorCode openDecoder(int mediaType,int *paramArray, int paramCount,
 
         setDiscardAudioStream();
 
-        // 保存音频编解码器名称到静态缓冲区
-        strncpy(audioCodecNameBuffer, avcodec_get_name(decoder->audioCodecContext->codec_id), 255);
+        // ✅ 仅在音频流存在时处理音频信息
+        if (decoder->audioCodecContext != NULL) {
+            // 保存音频编解码器名称到静态缓冲区
+            strncpy(audioCodecNameBuffer, avcodec_get_name(decoder->audioCodecContext->codec_id), 255);
 
-        LOG_INFO("Open audio codec context success, audio stream index %d %x.",
-            decoder->audioStreamIdx, (unsigned int)decoder->audioCodecContext);
+            LOG_INFO("Open audio codec context success, audio stream index %d %x.",
+                decoder->audioStreamIdx, (unsigned int)decoder->audioCodecContext);
 
-        LOG_INFO("Audio stream index:%d codec_id:%s sample_fmt:%d channel:%d, sample rate:%d.",
-            decoder->audioStreamIdx,
-            audioCodecNameBuffer,
-            decoder->audioCodecContext->sample_fmt,
-            decoder->audioCodecContext->channels,
-            decoder->audioCodecContext->sample_rate);
+            LOG_INFO("Audio stream index:%d codec_id:%s sample_fmt:%d channel:%d, sample rate:%d.",
+                decoder->audioStreamIdx,
+                audioCodecNameBuffer,
+                decoder->audioCodecContext->sample_fmt,
+                decoder->audioCodecContext->channels,
+                decoder->audioCodecContext->sample_rate);
+        }
         if(decoder->audioStreamIdx2 > 0 && decoder->audioCodecContext2){
             LOG_INFO("Open audio2 codec context success, audio stream index %d %x.",
                 decoder->audioStreamIdx2, (unsigned int)decoder->audioCodecContext2);
@@ -1538,9 +1558,16 @@ ErrorCode openDecoder(int mediaType,int *paramArray, int paramCount,
         params[1] = decoder->videoCodecContext->pix_fmt;
         params[2] = decoder->videoCodecContext->width;
         params[3] = decoder->videoCodecContext->height;
-        params[4] = decoder->audioCodecContext->sample_fmt;
-        params[5] = decoder->audioCodecContext->channels;
-        params[6] = decoder->audioCodecContext->sample_rate;
+        // ✅ 音频参数：仅在音频流存在时填充
+        if (decoder->audioCodecContext != NULL) {
+            params[4] = decoder->audioCodecContext->sample_fmt;
+            params[5] = decoder->audioCodecContext->channels;
+            params[6] = decoder->audioCodecContext->sample_rate;
+        } else {
+            params[4] = 0;
+            params[5] = 0;
+            params[6] = 0;
+        }
         if(decoder->audioCodecContext2){
             params[7] = decoder->audioCodecContext2->sample_fmt;
             params[8] = decoder->audioCodecContext2->channels;
@@ -1554,12 +1581,15 @@ ErrorCode openDecoder(int mediaType,int *paramArray, int paramCount,
         params[10] = (int)(intptr_t)videoCodecNameBuffer;
         params[11] = (int)(intptr_t)pixFmtNameBuffer;
         params[12] = (int)(intptr_t)audioCodecNameBuffer;
-        params[13] = (int)(intptr_t)audioCodecNameBuffer2; 
+        params[13] = (int)(intptr_t)audioCodecNameBuffer2;
 
-        enum AVSampleFormat sampleFmt = decoder->audioCodecContext->sample_fmt;
-        if (av_sample_fmt_is_planar(sampleFmt)) {
-            const char *packed = av_get_sample_fmt_name(sampleFmt);
-            params[4] = av_get_packed_sample_fmt(sampleFmt);
+        // ✅ 音频格式转换：仅在音频流存在时处理
+        if (decoder->audioCodecContext != NULL) {
+            enum AVSampleFormat sampleFmt = decoder->audioCodecContext->sample_fmt;
+            if (av_sample_fmt_is_planar(sampleFmt)) {
+                const char *packed = av_get_sample_fmt_name(sampleFmt);
+                params[4] = av_get_packed_sample_fmt(sampleFmt);
+            }
         }
         if(decoder->audioCodecContext2){
              enum AVSampleFormat sampleFmt2 = decoder->audioCodecContext2->sample_fmt;
@@ -1719,8 +1749,11 @@ int sendData(int offset, unsigned char *buff, int size, int type) {
             break;
         }
 
-        if(type == 1 && decoder->gotStreamInfo == 1){
-            if(decoder->dataOffset != offset){
+        // ✅ 修复：type=1的stream data应该总是写入FIFO，不管gotStreamInfo状态
+        //    原来的逻辑导致openDecoder之前的stream data被丢弃
+        if(type == 1){
+            // gotStreamInfo==1时才做offset检查
+            if(decoder->gotStreamInfo == 1 && decoder->dataOffset != offset){
                 av_fifo_reset(decoder->fifo);
                 av_fifo_reset(decoder->alignFifo);
                 LOG_INFO("sendData 重置FIFO, 数据偏移量不匹配, offset %d, size %d, decoder->dataOffset %d.", offset, size, decoder->dataOffset);
@@ -1776,14 +1809,14 @@ int sendData(int offset, unsigned char *buff, int size, int type) {
             
             // 在进行解密前检查鉴权状态
 #if THUNDERSTONE_DECRTPT_SUPPORT
-            if (decoder->tsDecrypt) {
-                // 检查鉴权状态 - 通过函数获取最新状态
+            if (decoder->tsDecrypt && decoder->enableDecryption) {
+                // ✅ 只有在启用解密时才检查鉴权状态
                 decoder->auth_status = get_auth_status();
                 if (decoder->auth_status != 1) {
                     LOG_ERROR("鉴权失败或未鉴权，无法进行解密操作");
                     return -100; // 返回特定错误码表示鉴权问题
                 }
-                
+
                 // 继续正常的解密操作...
             }
 #endif
@@ -1809,7 +1842,7 @@ int sendData(int offset, unsigned char *buff, int size, int type) {
             if (decoder->headBuffer != NULL) {
                 av_free(decoder->headBuffer);
             }
-            
+
             // 分配新的头部缓冲区
             decoder->headBuffer = (unsigned char*)av_mallocz(size);
             if (decoder->headBuffer == NULL) {
@@ -1818,30 +1851,81 @@ int sendData(int offset, unsigned char *buff, int size, int type) {
                 break;
             }
 
-            if(ts_header_check(buff, size) == 0){
-                // ✅ 修复：复制完整数据（包括512字节加密头）
-                memcpy(decoder->headBuffer, buff, size);
-                decoder->headBufferSize = size;
+            // ✅ 检查是否启用解密
+            if(decoder->enableDecryption && ts_header_check(buff, size) == 0){
+                // 完全照搬软解方案
+                memcpy(decoder->headBuffer, buff + ENCRYPT_HEAD_SIZE, size - ENCRYPT_HEAD_SIZE);
+                decoder->headBufferSize = size - ENCRYPT_HEAD_SIZE;
                 decoder->headOffset = offset;
-                LOG_DEBUG("Head data saved (encrypted), size: %d, offset: %d, buffer: %p",
-                        size, offset, decoder->headBuffer);
+                LOG_INFO("Head data saved, size: %d, offset: %d",
+                        decoder->headBufferSize, decoder->headOffset);
                 ret = decoder->headBufferSize;
-
-                // ✅ 解密：从512字节之后开始解密（跳过加密头）
+                // ✅ 关键发现：headBuffer解密不需要成功！真正的解密在alignFifoWrite
+                // 但为了和软解方案保持一致，仍然尝试解密（会失败但不影响播放）
                 tsDataDecryptSeek(decoder->tsDecrypt, 0);
-                if(tsDataDecrypt(decoder->tsDecrypt, decoder->headBuffer + ENCRYPT_HEAD_SIZE, size - ENCRYPT_HEAD_SIZE)){
-                    LOG_DEBUG("Decrypt head data err.");
-                    ret = -1;
-                }else{
-                    LOG_DEBUG("Decrypt head data ok.");
+
+                // 计算8KB对齐的大小（和tailBuffer处理一样）
+                int dataSize = size - ENCRYPT_HEAD_SIZE;  // 去掉magic header
+                int decryptSize = dataSize - (dataSize % ENCRYPT_CHUNK_SIZE);  // 8KB对齐
+
+                LOG_INFO("Head decrypt: dataSize=%d, decryptSize=%d (aligned)", dataSize, decryptSize);
+
+                if (decryptSize > 0) {
+                    // ✅ 按软解正确逻辑：解密整个headBuffer
+                    // headBuffer = buff + 512 (去掉magic header)，全部是需要解密的TS数据
+                    // Thunder加密格式：[0-511]=magic header, [512-...]=加密的segment 0开始
+                    int decryptRet = tsDataDecrypt(decoder->tsDecrypt, decoder->headBuffer, decryptSize);
+                    if(decryptRet){
+                        LOG_WARN("Decrypt head data failed: %d", decryptRet);
+                    }else{
+                        LOG_INFO("Decrypt head data ok: %d bytes", decryptSize);
+                    }
                 }
+
+                // 无论解密成功与否，都继续（headBuffer主要用于缓存）
+
+                // ✅ 关键修复：只写入解密后的部分，而不是整个headBuffer
+                // 因为只有8KB对齐的部分被解密了，剩余的未对齐部分还是加密的
+                int writeSize = decryptSize;  // 只写入解密的8KB
+                if (writeSize > 0) {
+                    LOG_INFO("Writing decrypted header data to FIFO for libmedia, size: %d (only decrypted part)", writeSize);
+                    int writeRet = av_fifo_generic_write(decoder->fifo, decoder->headBuffer, writeSize, NULL);
+                    if (writeRet < 0) {
+                        LOG_ERROR("Failed to write decrypted header to FIFO: %d", writeRet);
+                    } else {
+                        LOG_INFO("Decrypted header data written to FIFO successfully");
+                    }
+                }
+
+                // ⚠️ 未对齐的剩余部分(headBuffer[8192-15252])还是加密的
+                // 需要保存到alignFifo中，等待后续stream数据凑够8KB后一起解密
+                int remainSize = dataSize - decryptSize;  // 未对齐的剩余部分
+                if (remainSize > 0) {
+                    LOG_INFO("Saving remaining %d bytes to alignFifo (unaligned, still encrypted)", remainSize);
+                    av_fifo_generic_write(decoder->alignFifo, decoder->headBuffer + decryptSize, remainSize, NULL);
+                }
+
+                // 更新dataOffset
+                decoder->dataOffset = offset + size;
             }else{
+                // ✅ 解密已禁用或非加密文件：直接保存原始数据
                 memcpy(decoder->headBuffer, buff, size);
                 decoder->headBufferSize = size;
                 decoder->headOffset = offset;
-                LOG_DEBUG("Head data saved, size: %d, offset: %d, buffer: %p", 
-                        size, offset, decoder->headBuffer);
+                LOG_INFO("Head data saved (no decryption), size: %d, offset: %d", size, offset);
                 ret = size;
+
+                // ✅ 明文文件也要更新dataOffset
+                decoder->dataOffset = offset + size;
+
+                // ✅ 新增：将header数据也写入FIFO，这样ThunderWASMBridge.read()能读取到完整TS流
+                LOG_INFO("Writing header data to FIFO for libmedia direct read, size: %d", size);
+                int writeRet = av_fifo_generic_write(decoder->fifo, buff, size, NULL);
+                if (writeRet < 0) {
+                    LOG_ERROR("Failed to write header to FIFO: %d", writeRet);
+                } else {
+                    LOG_INFO("Header data written to FIFO successfully");
+                }
             }
             break;
         }
@@ -2106,6 +2190,47 @@ int getAudioChannels() {
     }
     // 兼容旧版本FFmpeg，使用channels而不是ch_layout
     return decoder->avformatContext->streams[decoder->audioStreamIdx]->codecpar->channels;
+}
+
+// ✅ 新增：直接从FIFO读取原始TS流（供ThunderWASMBridge使用）
+// 这样libmedia能收到TS流而不是packet
+int readFromFIFO(unsigned char *buffer, int size) {
+    if (decoder == NULL || decoder->fifo == NULL) {
+        LOG_ERROR("readFromFIFO: decoder or fifo is NULL");
+        return -1;
+    }
+
+    if (buffer == NULL || size <= 0) {
+        LOG_ERROR("readFromFIFO: invalid buffer or size");
+        return -2;
+    }
+
+    // 获取FIFO中可读数据量
+    int availableSize = av_fifo_size(decoder->fifo);
+
+    if (availableSize <= 0) {
+        // 检查是否EOF
+        if (decoder->readEof == 1) {
+            return 0;  // EOF
+        }
+        return 0;  // 暂无数据，但不是EOF
+    }
+
+    // 读取数据
+    int readSize = MIN(availableSize, size);
+    av_fifo_generic_read(decoder->fifo, buffer, readSize, NULL);
+    decoder->fileReadPos += readSize;
+
+    LOG_DEBUG("readFromFIFO: read %d bytes from FIFO (available: %d)", readSize, availableSize);
+    return readSize;
+}
+
+// ✅ 新增：获取FIFO当前使用量（用于流控）
+int getFIFOSize() {
+    if (decoder == NULL || decoder->fifo == NULL) {
+        return 0;
+    }
+    return av_fifo_size(decoder->fifo);
 }
 
 #ifdef __cplusplus

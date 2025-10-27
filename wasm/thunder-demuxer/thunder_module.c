@@ -131,6 +131,7 @@ extern int getVideoWidth();
 extern int getVideoHeight();
 extern int getAudioSampleRate();
 extern int getAudioChannels();
+extern int readFromFIFO(unsigned char *buffer, int size);
 
 EMSCRIPTEN_KEEPALIVE
 int js_readOnePacket() {
@@ -180,6 +181,20 @@ int js_getAudioSampleRate() {
 EMSCRIPTEN_KEEPALIVE
 int js_getAudioChannels() {
     return getAudioChannels();
+}
+
+// ✅ 新增：导出readFromFIFO函数（直接读取FIFO中的原始TS流）
+EMSCRIPTEN_KEEPALIVE
+int js_readFromFIFO(unsigned char *buffer, int size) {
+    return readFromFIFO(buffer, size);
+}
+
+// ✅ 新增：导出getFIFOSize函数（查询FIFO当前使用量，用于流控）
+extern int getFIFOSize();
+
+EMSCRIPTEN_KEEPALIVE
+int js_getFIFOSize() {
+    return getFIFOSize();
 }
 
 // 模块初始化函数

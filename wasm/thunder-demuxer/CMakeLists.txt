@@ -33,7 +33,7 @@ set(TOTAL_MEMORY 335544320)
 set(EM_FLAGS "
     -s WASM=1
     -s EXPORTED_RUNTIME_METHODS=['HEAPU8','HEAP32','UTF8ToString','stringToUTF8','ccall','cwrap','addFunction']
-    -s EXPORTED_FUNCTIONS=['_malloc','_free','_main','_js_init_auth','_js_get_version','_http_response_handler','_PEM_read_bio_RSA_PUBKEY','_initDecoder','_uninitDecoder','_openDecoder','_closeDecoder','_sendData','_decodeOnePacket','_switchAudioTrack','_seekTo','_printFifoRate','_getFifoUsedSize','_getFifoTotalSize','_get_auth_status_wrapper','_js_readOnePacket','_readOnePacket','_js_setPacketCallback','_setPacketCallback']
+    -s EXPORTED_FUNCTIONS=['_malloc','_free','_main','_js_init_auth','_js_get_version','_http_response_handler','_PEM_read_bio_RSA_PUBKEY','_initDecoder','_uninitDecoder','_openDecoder','_closeDecoder','_sendData','_decodeOnePacket','_switchAudioTrack','_seekTo','_printFifoRate','_getFifoUsedSize','_getFifoTotalSize','_get_auth_status_wrapper','_js_readOnePacket','_readOnePacket','_js_setPacketCallback','_setPacketCallback','_js_getVideoStreamIndex','_getVideoStreamIndex','_js_getAudioStreamIndex','_getAudioStreamIndex','_js_getVideoCodecId','_getVideoCodecId','_js_getAudioCodecId','_getAudioCodecId','_js_getVideoWidth','_getVideoWidth','_js_getVideoHeight','_getVideoHeight','_js_getAudioSampleRate','_getAudioSampleRate','_js_getAudioChannels','_getAudioChannels']
     -s ALLOW_MEMORY_GROWTH=1
     -s ASSERTIONS=1
     -s ERROR_ON_UNDEFINED_SYMBOLS=1
