@@ -164,7 +164,7 @@ sendData(512KB, remainingPtr, ..., 1)  // type=1: 后续数据
 npx http-server . -p 8000 --cors
 
 # 浏览器访问
-open http://localhost:8000/examples/hybrid-thunder-player/
+open http://localhost:9527/examples/hybrid-thunder-player/
 ```
 
 **测试步骤**:
@@ -344,45 +344,105 @@ videoDecoder.decode(chunk)
 
 ---
 
-## 🎯 我的建议
+## ✅ 最终解决方案 (2025-10-25更新)
 
-基于你说的"不想改libmedia",目前有两个选择:
+### 重大发现: libmedia原生支持H.264裸流!
 
-1. **方案2**: 在ThunderWASMBridge中实现TS重新封装
-   - 缺点:重复demux/mux,性能浪费
-   - 优点:不改libmedia
+通过分析`DemuxPipeline.ts`和`IH264Format.ts`,发现**libmedia本身就支持H.264/AAC裸流作为输入格式**!
 
-2. **方案3**: 先用WebCodecs验证packet正确性
-   - 证明WASM输出的packet是可用的
-   - 然后再决定如何集成
+**关键代码** (DemuxPipeline.ts:462-470):
+```typescript
+case AVFormat.H264:
+  if (defined(ENABLE_DEMUXER_H264)) {
+    iformat = new IH264Format(task.formatOptions)
+  }
+  break
+```
 
-**你倾向哪个方案?** 或者你有其他想法?
+**IH264Format工作原理** (IH264Format.ts:126-150):
+```typescript
+async readNaluFrame(formatContext: AVIFormatContext) {
+  while (true) {
+    const next = await this.naluReader.read(formatContext.ioReader)  // ← 直接读取NAL单元!
+    const type = next[(next[2] === 1 ? 3 : 4)] & 0x1f
+    if (this.isFrameNalu(next)) {
+      // 解析NAL单元，组装AVPacket
+    }
+  }
+}
+```
+
+### 🎯 完美方案:使用AVFormat.H264
+
+**无需重新封装TS,无需修改libmedia!**
+
+**数据流**:
+```
+ThunderWASMBridge.read()
+  → 返回H.264 NAL单元 (00 00 00 01 xx xx...)
+  → libmedia的IH264Format.readNaluFrame()
+  → 自动解析NAL,组装AVPacket
+  → WebCodecs硬解
+```
+
+**实现方式**:
+1. ThunderWASMBridge保持当前实现(返回H.264 NAL裸数据)
+2. 在index.html中指定`format: AVFormat.H264`
+3. libmedia自动使用IH264Format进行demux
+
+**优势**:
+- ✅ 不修改libmedia
+- ✅ 不重复demux/mux
+- ✅ 性能最优
+- ✅ 代码简洁
+- ✅ 完全符合libmedia设计
+
+### ⚠️ 音频处理
+
+当前WASM输出MP2音频,但ThunderWASMBridge只返回video packets。需要:
+1. **临时方案**: 仅播放视频(静音)
+2. **完整方案**: 支持返回audio packets,libmedia使用AAC/MP2格式
 
 ---
 
-## 📊 方案对比总结
+## 🚀 实施步骤
 
-| 维度 | 方案A (IOLoader) | 方案B (WASMBridge) |
-|------|------------------|---------------------|
+### 步骤1: 修改ThunderWASMBridge返回packet流
+
+当前ThunderWASMBridge.read()已经返回packet裸数据,**无需修改**。
+
+### 步骤2: 修改index.html指定H.264格式
+
+```javascript
+await state.player.load(state.currentLoader, {
+  format: AVFormat.H264,  // ← 关键:指定H.264裸流格式
+  isLive: false,
+  enableHardware: true
+})
+```
+
+### 步骤3: 测试播放
+
+点击"加载并播放"按钮,libmedia将:
+1. 检测到format=H264
+2. 使用IH264Format demuxer
+3. 从ThunderWASMBridge.read()读取NAL单元
+4. 组装AVPacket并送入WebCodecs解码
+
+---
+
+## 📊 最终方案对比
+
+| 维度 | 方案A (IOLoader) | 方案B (WASMBridge+H264) |
+|------|------------------|-------------------------|
 | **安全性** | ❌ 明文暴露JS | ✅ 仅packet暴露 |
-| **改造复杂度** | ✅ 简单 | ⚠️ 中等 |
-| **性能** | ✅ 单次解密 | ✅ WASM高效 |
+| **改造复杂度** | ✅ 简单 | ✅ 简单(仅指定格式) |
+| **性能** | ✅ 单次解密 | ✅ 单次demux,无冗余 |
 | **可维护性** | ⚠️ 安全风险 | ✅ 架构清晰 |
+| **修改libmedia** | ❌ 不需要 | ✅ 不需要! |
 | **兼容原软解** | ❌ 完全不同 | ✅ 高度对齐 |
 
-**结论**: 方案B是唯一满足安全需求的方案，虽然需要适配libmedia，但架构优雅且对齐原有软解播放器。
-
----
-
-## 🚀 下一步
-
-1. ✅ 验证WASM packet输出（当前已完成）
-2. ⏳ libmedia适配packet流输入
-   - 修改AVPlayer支持packet source
-   - 或创建PacketIOLoader → TS流重封装（临时方案）
-3. ⏳ 完整播放流程测试
-4. ⏳ Seek功能实现
-5. ⏳ 性能优化
+**结论**: 方案B+H264格式是完美解决方案,无需修改libmedia,利用其原生H.264裸流支持。
 
 ---
 

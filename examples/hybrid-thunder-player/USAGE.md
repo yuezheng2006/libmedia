@@ -13,7 +13,7 @@ pnpm run server
 
 在浏览器中打开：
 ```
-http://localhost:8000/examples/hybrid-thunder-player/
+http://localhost:9527/examples/hybrid-thunder-player/
 ```
 
 ### 3. 操作步骤

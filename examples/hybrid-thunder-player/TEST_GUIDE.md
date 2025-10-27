@@ -21,7 +21,7 @@ npx serve -p 8080 --cors
 
 打开Chrome浏览器，访问：
 ```
-http://localhost:8080/examples/hybrid-thunder-player/
+http://localhost:9527/examples/hybrid-thunder-player/
 ```
 
 ---

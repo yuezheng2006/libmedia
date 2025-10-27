@@ -89,5 +89,5 @@ await player.play()
 pnpm run server
 
 # 访问测试页面
-http://localhost:8000/examples/hybrid-thunder-player/
+http://localhost:9527/examples/hybrid-thunder-player/
 ```
